@@ -2,12 +2,29 @@
 ## General info
 
 - this IS NOT Solana project
-- always use uv to do all python related tasks. uv is already installed in the system
+- ALWAYS use `uv` to do ALL python related tasks. uv is already installed in the system
 - all dependencies MUST be managed through pyproject.toml
 - you should use local venv
 - all api keys etc. should be stored in .env file
 - use openai agents framework for creating AI agents
 - types for python are done using Pydantic
+
+## Examples
+
+- running python
+
+`source .venv/bin/activate && uv run python`
+
+- add dependency
+
+`source .venv/bin/activate && uv add <dependency name>`
+
+- install dependencies
+
+`source .venv/bin/activate && uv sync`
+
+
+
 
 ## Docs section
 
