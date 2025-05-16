@@ -41,7 +41,7 @@ class DoraConfig(BaseSettings):
     event_finder_config: AgentConfig = Field(
         default_factory=lambda: AgentConfig(
             model="gpt-4o",
-            temperature=0.2,
+            temperature=0.7,
             system_prompt="You are an event finder agent that finds events in a specified city using Perplexity API."
         )
     )

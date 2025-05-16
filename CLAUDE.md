@@ -32,7 +32,7 @@
 - MCP examples: https://github.com/modelcontextprotocol/python-sdk/tree/main/examples
 - A2A docs: https://google.github.io/A2A/
 - A2A examples: https://github.com/google/A2A/blob/main/samples/python
-- OpenAI-agents docs: https://github.com/openai/openai-agents-python
+- OpenAI-agents docs: https://openai.github.io/openai-agents-python/ 
 - Openai-agents examples: https://github.com/openai/openai-agents-python/tree/main/examples
 
 ## Basic rules

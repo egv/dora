@@ -10,11 +10,13 @@ from datetime import datetime
 from typing import Dict, List, Optional
 
 import agents
-from agents import Agent, FunctionTool, ModelSettings, Runner
+from agents import Agent, ModelSettings, Runner, trace
 from openai import AsyncOpenAI
 from pydantic import BaseModel, Field
+import time
 
 from dora.models.config import DoraConfig
+from dora.trace_processor import DebugTraceProcessor
 from dora.models.event import (
     AudienceDemographic,
     ClassifiedEvent,
@@ -24,14 +26,27 @@ from dora.models.event import (
     EventSize,
     NotificationContent,
 )
-from dora.tools import perplexity_search_tool
+from dora.tools import (
+    EventSearchResult,
+    EventData,
+    EventClassification,
+    LanguageList,
+    NotificationData,
+    AudienceData,
+)
 
 # Configure logging
+log_level = os.getenv("LOG_LEVEL", "INFO").upper()
 logging.basicConfig(
-    level=logging.INFO,
+    level=getattr(logging, log_level, logging.INFO),
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     handlers=[logging.StreamHandler()],
 )
+
+# Enable debug logging for agents library when tracing is enabled
+if os.getenv("ENABLE_TRACING", "true").lower() == "true":
+    logging.getLogger("agents").setLevel(logging.DEBUG)
+    logging.getLogger("openai").setLevel(logging.DEBUG)
 
 logger = logging.getLogger(__name__)
 
@@ -55,13 +70,13 @@ class DoraContext:
 class EventsOutputSchema(BaseModel):
     """Schema for events output."""
     
-    events: List[Dict] = Field(description="List of events found in the city")
+    events: List[EventData] = Field(description="List of events found in the city")
 
 
 class ClassificationOutputSchema(BaseModel):
     """Schema for event classification output."""
     
-    classification: Dict = Field(description="Classification of the event")
+    classification: EventClassification = Field(description="Classification of the event")
 
 
 class LanguagesOutputSchema(BaseModel):
@@ -73,41 +88,58 @@ class LanguagesOutputSchema(BaseModel):
 class NotificationsOutputSchema(BaseModel):
     """Schema for notifications output."""
     
-    notifications: List[Dict] = Field(description="Generated notifications for the event")
+    notifications: List[NotificationData] = Field(description="Generated notifications for the event")
+
+
+class FinalResult(BaseModel):
+    """A single result with event and its notifications."""
+    event: EventData = Field(description="Event information")
+    classification: EventClassification = Field(description="Event classification")
+    notifications: List[NotificationData] = Field(description="Event notifications")
 
 
 class FinalOutputSchema(BaseModel):
     """Schema for final output."""
     
-    results: List[Dict] = Field(description="Final processed results with events and notifications")
+    results: List[FinalResult] = Field(description="Final processed results with events and notifications")
 
 
-def create_event_finder_agent(config: DoraConfig) -> Agent:
+def create_event_finder_agent(config: DoraConfig, events_count: int = 10) -> Agent:
     """Create an event finder agent.
     
     Args:
         config: Application configuration
+        events_count: Number of events to find
         
     Returns:
         Event finder agent
     """
-    # Create Perplexity search tool
-    search_tool = perplexity_search_tool(config.perplexity_api_key)
+    # Import the internal function
+    from dora.tools import perplexity_search
     
-    instructions = """
+    # Create a Perplexity search tool with the API key bound
+    from agents import function_tool
+    
+    @function_tool
+    def search_events_perplexity(query: str) -> EventSearchResult:
+        """Search for events using Perplexity API."""
+        return perplexity_search(query, config.perplexity_api_key)
+    
+    instructions = f"""
     You are an event finder agent that discovers events in cities.
     
-    When given a city name, search for major events, concerts, festivals, sports events, and cultural events 
-    taking place in the next two weeks.
+    When given a city name, find EXACTLY {events_count} events happening in the next two weeks.
     
-    For each event, provide:
+    Use the search_events_perplexity tool with the query: "[city name] events next 2 weeks".
+    
+    From the search results, extract exactly {events_count} events with:
     1. Event name
-    2. Description
-    3. Location
-    4. Date and time (start and end if available)
-    5. URL for more information if available
+    2. Description  
+    3. Location (venue and address)
+    4. Date (as YYYY-MM-DD format)
+    5. URL (if available, or use "https://example.com" as default)
     
-    Use the search_perplexity tool to find information.
+    Output exactly {events_count} events - no more, no less. Stop after {events_count} events.
     """
     
     return Agent(
@@ -115,7 +147,7 @@ def create_event_finder_agent(config: DoraConfig) -> Agent:
         instructions=instructions,
         model=config.event_finder_config.model,
         model_settings=ModelSettings(temperature=config.event_finder_config.temperature),
-        tools=[search_tool],
+        tools=[search_events_perplexity],
         output_type=EventsOutputSchema,
     )
 
@@ -147,12 +179,12 @@ def create_event_classifier_agent(config: DoraConfig) -> Agent:
        - CRITICAL: Major national or international event
     
     3. TARGET AUDIENCES:
-       Identify exactly 3 primary demographic groups that would be most interested in this event.
-       For each group, specify:
-       - Gender (if relevant, or "any")
-       - Age range (e.g., "18-25", "30-45")
-       - Income level (low, middle, high)
-       - Any other relevant attributes (e.g., "music enthusiasts", "sports fans", "art lovers")
+       Identify exactly 1 primary demographic group that would be most interested in this event.
+       For the group, specify:
+       - Gender: "any"
+       - Age range (e.g., "18-35", "25-50")
+       - Income level: "middle"
+       - One relevant attribute (e.g., "music lovers" or "sports fans")
     """
     
     return Agent(
@@ -176,13 +208,14 @@ def create_language_selector_agent(config: DoraConfig) -> Agent:
     instructions = """
     You are a language selector agent that determines languages commonly spoken in cities.
     
-    When given a city name, identify:
-    1. The top 3 most widely spoken languages in that city, in order of prevalence
-    2. Include both official languages and those spoken by significant portions of the population
-    3. Include languages commonly used in business or tourism
+    When given a city name, identify ONLY THE TOP 1 most widely spoken language in that city.
+    Return exactly 1 language - no more, no less.
     
-    Use standard language names (English, Spanish, Mandarin, etc.) and ensure the list has at least 1 and at most 3 languages.
-    If there is only one main language, just include that one.
+    For New York, return: ["English"]
+    For San Francisco, return: ["English"]
+    For Los Angeles, return: ["English"]
+    
+    Use standard language names only.
     """
     
     return Agent(
@@ -224,26 +257,30 @@ def create_text_writer_agent(config: DoraConfig) -> Agent:
     )
 
 
-def create_orchestrator_agent(config: DoraConfig) -> Agent:
+def create_orchestrator_agent(config: DoraConfig, events_count: int = 10) -> Agent:
     """Create an orchestrator agent.
     
     Args:
         config: Application configuration
+        events_count: Number of events to process
         
     Returns:
         Orchestrator agent
     """
-    instructions = """
-    You are an orchestration agent that coordinates the process of discovering events in cities, 
-    classifying them, finding languages spoken in the city, and generating targeted push notifications.
+    instructions = f"""
+    You are an orchestration agent that coordinates the process of discovering events and generating notifications.
     
-    Your goal is to:
-    1. Find events in the specified city
-    2. Classify each event by size, importance, and target audiences
-    3. Determine languages commonly spoken in the city
-    4. Generate personalized push notifications for each event, audience, and language combination
+    Follow these steps:
+    1. Use find_events to get {events_count} events in the specified city
+    2. Use get_languages once to get the main language for the city
+    3. For EACH event:
+       - Classify it using classify_event
+       - Generate a notification using generate_notification for the identified audience and language
     
-    Return the complete results with all events and their notifications.
+    Your final output should include exactly {events_count} events, each with:
+    - Event details
+    - Classification (size, importance, 1 audience)
+    - 1 notification (1 audience × 1 language)
     """
     
     return Agent(
@@ -255,7 +292,7 @@ def create_orchestrator_agent(config: DoraConfig) -> Agent:
     )
 
 
-def format_notification_for_display(notification: Dict) -> Dict:
+def format_notification_for_display(notification: FinalResult) -> Dict:
     """Format a notification for display.
     
     Args:
@@ -264,19 +301,19 @@ def format_notification_for_display(notification: Dict) -> Dict:
     Returns:
         A dictionary with formatted event notification data
     """
-    event = notification.get("event", {})
-    classification = notification.get("classification", {})
-    notifications = notification.get("notifications", [])
+    event = notification.event
+    classification = notification.classification
+    notifications = notification.notifications
     
     # Format dates
-    start_date = event.get("start_date", "")
+    start_date = event.start_date
     if isinstance(start_date, str):
         try:
             start_date = datetime.fromisoformat(start_date.replace('Z', '+00:00')).strftime("%Y-%m-%d %H:%M")
         except (ValueError, TypeError):
             pass
     
-    end_date = event.get("end_date", "")
+    end_date = event.end_date
     if isinstance(end_date, str) and end_date:
         try:
             end_date = datetime.fromisoformat(end_date.replace('Z', '+00:00')).strftime("%Y-%m-%d %H:%M")
@@ -287,19 +324,26 @@ def format_notification_for_display(notification: Dict) -> Dict:
     
     return {
         "event": {
-            "name": event.get("name", "Unknown Event"),
-            "description": event.get("description", ""),
-            "location": event.get("location", ""),
+            "name": event.name,
+            "description": event.description,
+            "location": event.location,
             "start_date": start_date,
             "end_date": end_date,
-            "url": event.get("url"),
+            "url": event.url,
         },
         "classification": {
-            "size": classification.get("size", "medium"),
-            "importance": classification.get("importance", "medium"),
-            "target_audiences": classification.get("target_audiences", []),
+            "size": classification.size,
+            "importance": classification.importance,
+            "target_audiences": [str(audience) for audience in classification.target_audiences],
         },
-        "notifications": notifications,
+        "notifications": [
+            {
+                "language": n.language,
+                "audience": str(n.audience),
+                "text": n.text
+            }
+            for n in notifications
+        ],
     }
 
 
@@ -310,12 +354,13 @@ def create_venv_if_needed():
         os.system("uv venv")
 
 
-async def process_city(city: str, days_ahead: int = 14, config: Optional[DoraConfig] = None):
+async def process_city(city: str, days_ahead: int = 14, events_count: int = 10, config: Optional[DoraConfig] = None):
     """Process a city to find events and generate notifications.
     
     Args:
         city: The city to process
         days_ahead: Number of days ahead to search for events
+        events_count: Number of events to find and process
         config: Application configuration
         
     Returns:
@@ -331,121 +376,42 @@ async def process_city(city: str, days_ahead: int = 14, config: Optional[DoraCon
     context = DoraContext(city)
     
     # Create agents
-    event_finder = create_event_finder_agent(config)
+    event_finder = create_event_finder_agent(config, events_count)
     event_classifier = create_event_classifier_agent(config)
     language_selector = create_language_selector_agent(config)
     text_writer = create_text_writer_agent(config)
-    orchestrator = create_orchestrator_agent(config)
+    orchestrator = create_orchestrator_agent(config, events_count)
     
-    # Create function tools for the orchestrator
-    async def find_events_tool(city: str) -> str:
-        """Find events in a city.
-        
-        Args:
-            city: The city to search
-            
-        Returns:
-            JSON string with found events
-        """
-        prompt = f"Find events in {city} for the next {days_ahead} days."
-        result = await Runner.run(event_finder, prompt, context=context)
-        return json.dumps(result.output.events)
+    # Create event finder tool using agent.as_tool()
+    event_finder_tool = event_finder.as_tool(
+        tool_name="find_events",
+        tool_description=f"Find events in a city for the next {days_ahead} days. Provide the city name as input."
+    )
     
-    async def classify_event_tool(event_json: str) -> str:
-        """Classify an event.
-        
-        Args:
-            event_json: JSON string representing an event
-            
-        Returns:
-            JSON string with classification
-        """
-        result = await Runner.run(event_classifier, f"Classify this event: {event_json}", context=context)
-        return json.dumps(result.output.classification)
+    # Create event classifier tool using agent.as_tool()
+    event_classifier_tool = event_classifier.as_tool(
+        tool_name="classify_event",
+        tool_description="Classify an event by size, importance, and target audiences. Provide event details as input."
+    )
     
-    async def get_languages_tool(city: str) -> str:
-        """Get languages spoken in a city.
-        
-        Args:
-            city: The city to get languages for
-            
-        Returns:
-            JSON string with languages
-        """
-        result = await Runner.run(language_selector, f"What languages are spoken in {city}?", context=context)
-        return json.dumps(result.output.languages)
+    # Create language selector tool using agent.as_tool()
+    language_selector_tool = language_selector.as_tool(
+        tool_name="get_languages",
+        tool_description="Get languages commonly spoken in a city. Provide the city name as input."
+    )
     
-    async def generate_notification_tool(event_json: str, audience_json: str, language: str) -> str:
-        """Generate a notification for an event.
-        
-        Args:
-            event_json: JSON string with event data
-            audience_json: JSON string with audience data
-            language: Language to generate the notification in
-            
-        Returns:
-            JSON string with notification
-        """
-        prompt = f"""
-        Generate a push notification for this event: {event_json}
-        Target audience: {audience_json}
-        Language: {language}
-        """
-        result = await Runner.run(text_writer, prompt, context=context)
-        return json.dumps(result.output.notifications)
+    # Create text writer tool using agent.as_tool()
+    text_writer_tool = text_writer.as_tool(
+        tool_name="generate_notification",
+        tool_description="Generate a push notification for an event. Provide event details, target audience, and language."
+    )
     
-    # Create tool definitions
+    # List of tools for the orchestrator
     tools = [
-        FunctionTool(
-            name="find_events",
-            description="Find events in a city",
-            function=find_events_tool,
-            args_schema={
-                "type": "object",
-                "properties": {
-                    "city": {"type": "string", "description": "The city to search for events"}
-                },
-                "required": ["city"]
-            }
-        ),
-        FunctionTool(
-            name="classify_event",
-            description="Classify an event by size, importance, and target audiences",
-            function=classify_event_tool,
-            args_schema={
-                "type": "object",
-                "properties": {
-                    "event_json": {"type": "string", "description": "JSON string with event data"}
-                },
-                "required": ["event_json"]
-            }
-        ),
-        FunctionTool(
-            name="get_languages",
-            description="Get languages spoken in a city",
-            function=get_languages_tool,
-            args_schema={
-                "type": "object",
-                "properties": {
-                    "city": {"type": "string", "description": "The city to get languages for"}
-                },
-                "required": ["city"]
-            }
-        ),
-        FunctionTool(
-            name="generate_notification",
-            description="Generate a notification for an event",
-            function=generate_notification_tool,
-            args_schema={
-                "type": "object",
-                "properties": {
-                    "event_json": {"type": "string", "description": "JSON string with event data"},
-                    "audience_json": {"type": "string", "description": "JSON string with audience data"},
-                    "language": {"type": "string", "description": "Language to generate the notification in"}
-                },
-                "required": ["event_json", "audience_json", "language"]
-            }
-        ),
+        event_finder_tool,
+        event_classifier_tool,
+        language_selector_tool,
+        text_writer_tool,
     ]
     
     # Update orchestrator with tools
@@ -458,11 +424,30 @@ async def process_city(city: str, days_ahead: int = 14, config: Optional[DoraCon
         output_type=orchestrator.output_type,
     )
     
-    # Run the orchestrator
+    # Run the orchestrator with tracing
     prompt = f"Process events in {city} for the next {days_ahead} days."
-    result = await Runner.run(orchestrator_with_tools, prompt, context=context)
     
-    return result.output.results
+    with trace(f"ProcessCity:{city}") as process_trace:
+        process_trace.metadata = {"city": city, "days_ahead": str(days_ahead), "events_count": str(events_count)}
+        
+        logger.info(f"[TRACE] Starting orchestrator with prompt: {prompt}")
+        runner_start_time = time.time()
+        
+        result = await Runner.run(
+            orchestrator_with_tools, 
+            prompt, 
+            context=context
+        )
+        
+        runner_duration = time.time() - runner_start_time
+        logger.info(f"[TRACE] Orchestrator completed in {runner_duration:.2f} seconds")
+        
+        process_trace.metadata.update({
+            "duration_seconds": f"{runner_duration:.2f}",
+            "events_found": str(len(result.final_output.results) if result.final_output else 0)
+        })
+    
+    return result.final_output.results
 
 
 async def main_async():
@@ -481,8 +466,20 @@ async def main_async():
         default=14,
         help="Number of days ahead to search for events (default: 14)",
     )
+    parser.add_argument(
+        "--events",
+        type=int,
+        default=10,
+        help="Number of events to find and process (default: 10)",
+    )
     
     args = parser.parse_args()
+    
+    # Register custom trace processor if debug logging is enabled
+    if os.getenv("LOG_LEVEL", "INFO").upper() == "DEBUG":
+        from agents.tracing import add_trace_processor
+        debug_processor = DebugTraceProcessor()
+        add_trace_processor(debug_processor)
     
     try:
         # Create virtual environment if needed
@@ -495,9 +492,27 @@ async def main_async():
             logger.error("OPENAI_API_KEY environment variable is required")
             sys.exit(1)
         
-        # Process the city
-        logger.info(f"Processing city: {args.city}")
-        results = await process_city(args.city, args.days, config)
+        # Process the city with tracing
+        logger.info(f"Processing city: {args.city} for {args.events} events")
+        
+        with trace("DoraApp") as app_trace:
+            app_trace.metadata = {
+                "city": args.city, 
+                "days": str(args.days),
+                "events": str(args.events),
+                "output_format": args.output
+            }
+            
+            start_time = time.time()
+            results = await process_city(args.city, args.days, args.events, config)
+            elapsed_time = time.time() - start_time
+            
+            app_trace.metadata.update({
+                "duration_seconds": f"{elapsed_time:.2f}",
+                "events_processed": str(len(results) if results else 0)
+            })
+            
+            logger.info(f"Processing completed in {elapsed_time:.2f} seconds")
         
         if not results:
             logger.info(f"No events found in {args.city}")
