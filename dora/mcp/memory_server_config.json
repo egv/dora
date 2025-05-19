@@ -1,0 +1,31 @@
+{
+    "name": "dora-memory",
+    "description": "Persistent memory cache for Dora event data",
+    "version": "1.0.0",
+    "tools": [
+        {
+            "name": "check_event",
+            "description": "Check if an event exists in the cache"
+        },
+        {
+            "name": "get_event",
+            "description": "Retrieve cached event data"
+        },
+        {
+            "name": "store_event",
+            "description": "Store processed event data in cache"
+        },
+        {
+            "name": "cache_stats",
+            "description": "Get cache statistics"
+        },
+        {
+            "name": "clear_cache",
+            "description": "Clear cache entries"
+        },
+        {
+            "name": "list_events",
+            "description": "List cached events for debugging"
+        }
+    ]
+}

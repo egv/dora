@@ -34,6 +34,7 @@ from dora.tools import (
     NotificationData,
     AudienceData,
 )
+from dora.memory_cache import MemoryCache
 
 # Configure logging
 log_level = os.getenv("LOG_LEVEL", "INFO").upper()
@@ -397,7 +398,7 @@ def create_venv_if_needed():
         os.system("uv venv")
 
 
-async def process_city(city: str, days_ahead: int = 14, events_count: int = 10, config: Optional[DoraConfig] = None):
+async def process_city_original(city: str, days_ahead: int = 14, events_count: int = 10, config: Optional[DoraConfig] = None):
     """Process a city to find events and generate notifications.
     
     Args:
@@ -491,6 +492,200 @@ async def process_city(city: str, days_ahead: int = 14, events_count: int = 10, 
         })
     
     return result.final_output.results
+
+
+async def process_city(city: str, days_ahead: int = 14, events_count: int = 10, config: Optional[DoraConfig] = None):
+    """Process a city to find events and generate notifications with caching.
+    
+    Args:
+        city: The city to process
+        days_ahead: Number of days ahead to search for events
+        events_count: Number of events to find and process
+        config: Application configuration
+        
+    Returns:
+        Processed results
+    """
+    if config is None:
+        config = DoraConfig()
+    
+    # Initialize memory cache
+    cache = MemoryCache(config)
+    
+    # Set up OpenAI client
+    agents.set_default_openai_key(config.openai_api_key)
+    
+    # Create agents
+    event_finder = create_event_finder_agent(config, events_count)
+    event_classifier = create_event_classifier_agent(config)
+    language_selector = create_language_selector_agent(config)
+    text_writer = create_text_writer_agent(config)
+    
+    # Track timing
+    total_start_time = time.time()
+    cache_hits = 0
+    cache_misses = 0
+    
+    with trace(f"ProcessCity:{city}") as process_trace:
+        process_trace.metadata = {"city": city, "days_ahead": str(days_ahead), "events_count": str(events_count)}
+        
+        # Step 1: Find events
+        logger.info(f"Finding events in {city}")
+        find_events_start = time.time()
+        
+        event_result = await Runner.run(
+            event_finder,
+            city,
+            input_schema={"type": "string", "description": "City name"}
+        )
+        
+        find_events_duration = time.time() - find_events_start
+        events = event_result.output.events if event_result.output else []
+        logger.info(f"Found {len(events)} events in {find_events_duration:.2f}s")
+        
+        # Step 2: Get languages for the city
+        logger.info(f"Getting languages for {city}")
+        lang_start = time.time()
+        
+        language_result = await Runner.run(
+            language_selector,
+            city,
+            input_schema={"type": "string", "description": "City name"}
+        )
+        
+        languages = language_result.output.languages if language_result.output else ["en"]
+        lang_duration = time.time() - lang_start
+        logger.info(f"Found languages {languages} in {lang_duration:.2f}s")
+        
+        # Step 3: Process each event with caching
+        results = []
+        
+        for i, event in enumerate(events):
+            logger.info(f"Processing event {i+1}/{len(events)}: {event.name}")
+            event_start = time.time()
+            
+            # Convert event to dict for cache lookup
+            event_dict = event.model_dump()
+            
+            # Check cache first
+            cached_data = cache.get_event(event_dict)
+            
+            if cached_data:
+                # Use cached data
+                logger.info(f"Cache hit for event: {event.name}")
+                cache_hits += 1
+                
+                result = FinalResult(
+                    event=event,
+                    classification=EventClassification(**cached_data["classification"]),
+                    notifications=[NotificationData(**n) for n in cached_data["notifications"]]
+                )
+                results.append(result)
+                process_trace.metadata[f"event_{i}_cached"] = "true"
+                continue
+            
+            # Process event if not in cache
+            cache_misses += 1
+            
+            # Classify the event
+            logger.info(f"Classifying event: {event.name}")
+            classify_start = time.time()
+            
+            classification_result = await Runner.run(
+                event_classifier,
+                event_dict,
+                input_schema={
+                    "type": "object",
+                    "description": "Event details for classification"
+                }
+            )
+            classification = classification_result.output.classification
+            classify_duration = time.time() - classify_start
+            logger.info(f"Classified event in {classify_duration:.2f}s")
+            
+            # Generate notifications for each language and audience
+            notifications = []
+            notify_start = time.time()
+            
+            for language in languages:
+                for audience in classification.target_audiences:
+                    notification_input = {
+                        "event": event_dict,
+                        "audience": {
+                            "demographic": audience,
+                            "interests": [],
+                            "tech_savvy": True,
+                            "local": True
+                        },
+                        "language": language,
+                        "context": {
+                            "group_id": "general",
+                            "season": "winter",
+                            "time_of_day": "evening"
+                        }
+                    }
+                    
+                    notification_result = await Runner.run(
+                        text_writer,
+                        notification_input,
+                        input_schema={
+                            "type": "object",
+                            "description": "Notification generation parameters"
+                        }
+                    )
+                    
+                    if notification_result.output and notification_result.output.notifications:
+                        for notif in notification_result.output.notifications:
+                            # Add language and group info to notification
+                            notif_dict = notif.model_dump()
+                            notif_dict["language"] = language
+                            notif_dict["context"]["group_id"] = "general"
+                            notifications.append(NotificationData(**notif_dict))
+            
+            notify_duration = time.time() - notify_start
+            logger.info(f"Generated {len(notifications)} notifications in {notify_duration:.2f}s")
+            
+            event_duration = time.time() - event_start
+            processing_time_ms = int(event_duration * 1000)
+            
+            # Store in cache
+            cache.store_event(
+                event_data=event_dict,
+                classification=classification.model_dump(),
+                notifications=[n.model_dump() for n in notifications],
+                processing_time_ms=processing_time_ms
+            )
+            
+            result = FinalResult(
+                event=event,
+                classification=classification,
+                notifications=notifications
+            )
+            results.append(result)
+            
+            process_trace.metadata[f"event_{i}_cached"] = "false"
+            process_trace.metadata[f"event_{i}_processing_ms"] = str(processing_time_ms)
+        
+        # Update trace metadata
+        total_duration = time.time() - total_start_time
+        process_trace.metadata.update({
+            "duration_seconds": f"{total_duration:.2f}",
+            "events_found": str(len(events)),
+            "cache_hits": str(cache_hits),
+            "cache_misses": str(cache_misses),
+            "cache_hit_rate": f"{(cache_hits / len(events) * 100) if events else 0:.1f}%"
+        })
+        
+        # Log cache statistics
+        stats = cache.get_cache_stats()
+        if stats:
+            logger.info(
+                f"Cache stats: {stats['total_entries']} entries, "
+                f"{stats['hit_rate']:.1f}% hit rate, "
+                f"{stats['database_size_mb']:.2f}MB"
+            )
+    
+    return results
 
 
 async def main_async():

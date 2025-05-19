@@ -30,6 +30,12 @@ class DoraConfig(BaseSettings):
     perplexity_api_key: str = Field(default="", env="PERPLEXITY_API_KEY")
     telegram_api_key: str = Field(default="", env="TELEGRAM_API_KEY")
     
+    # Memory cache configuration
+    memory_cache_enabled: bool = Field(default=True, env="MEMORY_CACHE_ENABLED")
+    memory_cache_path: str = Field(default="./cache/dora_memory.db", env="MEMORY_CACHE_PATH")
+    memory_cache_ttl_days: int = Field(default=7, env="MEMORY_CACHE_TTL_DAYS")
+    memory_cache_max_size_mb: int = Field(default=100, env="MEMORY_CACHE_MAX_SIZE_MB")
+    
     # Agent Configurations
     orchestrator_config: AgentConfig = Field(
         default_factory=lambda: AgentConfig(
