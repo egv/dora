@@ -17,6 +17,7 @@ dependencies = [
     "openai-agents<=0.0.14",
     "pytest>=7.0.0",
     "nest-asyncio>=1.5.0",
+    "python-telegram-bot>=20.0",
 ]
 
 [project.optional-dependencies]

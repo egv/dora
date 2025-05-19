@@ -28,6 +28,7 @@ class DoraConfig(BaseSettings):
     # API Keys
     openai_api_key: str = Field(default="", env="OPENAI_API_KEY")
     perplexity_api_key: str = Field(default="", env="PERPLEXITY_API_KEY")
+    telegram_api_key: str = Field(default="", env="TELEGRAM_API_KEY")
     
     # Agent Configurations
     orchestrator_config: AgentConfig = Field(

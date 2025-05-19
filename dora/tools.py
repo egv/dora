@@ -38,10 +38,10 @@ def perplexity_search(query: str, api_key: str) -> EventSearchResult:
         data = {
             "model": "sonar",
             "messages": [
-                {"role": "system", "content": "You are a comprehensive event finder. Your job is to find exactly 10 events happening in the specified location. Include concerts, sports, theater, festivals, exhibitions, conferences, comedy shows, food events, and more. List exactly 10 different events with their dates, locations, and URLs. Do not summarize - list each event separately."},
-                {"role": "user", "content": query + " Please provide exactly 10 different events happening in the next 2 weeks. Include various types: concerts, sports, theater, comedy, festivals, museums, conferences, food/wine events, etc. Make sure to list exactly 10 events, no more and no less."},
+                {"role": "system", "content": "You are a comprehensive event finder. Your job is to find exactly 10 events happening in the specified location. IMPORTANT: Only include events with SPECIFIC street addresses and EXACT dates. Do NOT include generic listings like 'various Broadway shows' or 'ongoing exhibitions'. Each event must have: 1) A specific name, 2) An exact date, 3) A complete street address. Include concerts, sports, theater, festivals, exhibitions, conferences, comedy shows, food events, and more. List exactly 10 different events. Do not summarize - list each event separately."},
+                {"role": "user", "content": query + " Please provide exactly 10 different events happening in the next 2 weeks with SPECIFIC addresses and EXACT dates. Do NOT include generic listings like 'various shows' or events with vague dates like 'Thursdays' or 'ongoing'. Each event must be a specific occurrence with: 1) Event name, 2) Exact date (e.g., May 20, 2025), 3) Complete venue address (e.g., 123 Main St, City). Include various types: concerts, sports, theater, comedy, festivals, museums, conferences, food/wine events, etc."},
             ],
-            "temperature": 0.7,
+            "temperature": 0.5,
             "max_tokens": 4000,
         }
         

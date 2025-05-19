@@ -91,6 +91,20 @@ class NotificationsOutputSchema(BaseModel):
     notifications: List[NotificationData] = Field(description="Generated notifications for the event")
 
 
+class BatchNotificationData(BaseModel):
+    """Batch notification data for multiple events."""
+    event_name: str = Field(description="Event name this notification is for")
+    audience: AudienceData = Field(description="Target audience") 
+    language: str = Field(description="Notification language")
+    text: str = Field(description="Notification text")
+
+
+class BatchNotificationsOutputSchema(BaseModel):
+    """Schema for batch notifications output."""
+    
+    notifications: List[BatchNotificationData] = Field(description="Generated notifications for multiple events")
+
+
 class FinalResult(BaseModel):
     """A single result with event and its notifications."""
     event: EventData = Field(description="Event information")
@@ -132,11 +146,17 @@ def create_event_finder_agent(config: DoraConfig, events_count: int = 10) -> Age
     
     Use the search_events_perplexity tool with the query: "[city name] events next 2 weeks".
     
+    IMPORTANT REQUIREMENTS:
+    - ONLY include events with SPECIFIC addresses (e.g., "123 Main St", "Golden Gate Park")
+    - ONLY include events with SPECIFIC dates (e.g., "2025-05-20", not "various dates")
+    - DO NOT include generic listings like "various shows", "multiple performances", or "ongoing exhibitions"
+    - Each event must have a unique, specific occurrence with exact date and location
+    
     From the search results, extract exactly {events_count} events with:
-    1. Event name
+    1. Event name (specific event, not a generic listing)
     2. Description  
-    3. Location (venue and address)
-    4. Date (as YYYY-MM-DD format)
+    3. Location (MUST include specific venue name AND street address)
+    4. Date (MUST be exact date in YYYY-MM-DD format, not ranges or "various")
     5. URL (if available, or use "https://example.com" as default)
     
     Output exactly {events_count} events - no more, no less. Stop after {events_count} events.
@@ -179,12 +199,16 @@ def create_event_classifier_agent(config: DoraConfig) -> Agent:
        - CRITICAL: Major national or international event
     
     3. TARGET AUDIENCES:
-       Identify exactly 1 primary demographic group that would be most interested in this event.
-       For the group, specify:
-       - Gender: "any"
+       Identify UP TO 3 different demographic groups that would be most interested in this event.
+       For each group, specify:
+       - Gender: "male", "female", or "any"
        - Age range (e.g., "18-35", "25-50")
-       - Income level: "middle"
-       - One relevant attribute (e.g., "music lovers" or "sports fans")
+       - Income level: "low", "middle", "high", or "any"
+       - One or more relevant attributes (e.g., "music lovers", "sports fans", "families")
+       
+       Only include audiences that actually make sense for the event.
+       For specialized events, you might have only 1-2 audiences.
+       For general events (like festivals), you might have 3 different audiences.
     """
     
     return Agent(
@@ -208,14 +232,19 @@ def create_language_selector_agent(config: DoraConfig) -> Agent:
     instructions = """
     You are a language selector agent that determines languages commonly spoken in cities.
     
-    When given a city name, identify ONLY THE TOP 1 most widely spoken language in that city.
-    Return exactly 1 language - no more, no less.
+    When given a city name, identify THE TOP 3 most widely spoken languages in that city.
+    Return exactly 3 languages ordered by how commonly they are spoken (most common first).
     
-    For New York, return: ["English"]
-    For San Francisco, return: ["English"]
-    For Los Angeles, return: ["English"]
+    Examples:
+    - For New York City, return: ["English", "Spanish", "Chinese"]
+    - For San Francisco, return: ["English", "Chinese", "Spanish"]
+    - For Los Angeles, return: ["English", "Spanish", "Korean"]
+    - For Lusaka, return: ["English", "Bemba", "Tonga"]
+    - For Tokyo, return: ["Japanese", "English", "Chinese"]
+    - For Paris, return: ["French", "English", "Arabic"]
+    - For Abidjan, return: ["French", "English", "Dioula"]
     
-    Use standard language names only.
+    Use standard language names only. Research the actual language demographics of the city.
     """
     
     return Agent(
@@ -239,13 +268,19 @@ def create_text_writer_agent(config: DoraConfig) -> Agent:
     instructions = """
     You are a text writer agent that creates engaging push notifications for events.
     
-    When given an event, target audience, and language:
-    1. Generate a compelling push notification that promotes taking a taxi (with a 10% discount) to the event
-    2. Make sure the notification is written in the specified language
-    3. Keep the notification under 140 characters (like a tweet)
-    4. Make it appealing specifically to the target audience
+    BULK PROCESSING: You receive a structured array of events and generate notifications for all of them in a single call.
+    
+    Input format: An array containing multiple events with their audiences and languages.
+    
+    For EACH event-audience-language combination in the input array:
+    1. Generate a compelling push notification that promotes taking a taxi (with a 10% discount)
+    2. Write in the specified language for that item
+    3. Keep under 140 characters (like a tweet)
+    4. Make it appealing to the specific target audience
     5. Include a clear call-to-action
     6. Create urgency without being pushy
+    
+    Return an array of notifications matching the input array order.
     """
     
     return Agent(
@@ -253,7 +288,7 @@ def create_text_writer_agent(config: DoraConfig) -> Agent:
         instructions=instructions,
         model=config.text_writer_config.model,
         model_settings=ModelSettings(temperature=config.text_writer_config.temperature),
-        output_type=NotificationsOutputSchema,
+        output_type=BatchNotificationsOutputSchema,
     )
 
 
@@ -270,17 +305,25 @@ def create_orchestrator_agent(config: DoraConfig, events_count: int = 10) -> Age
     instructions = f"""
     You are an orchestration agent that coordinates the process of discovering events and generating notifications.
     
+    CRITICAL: Make ONLY ONE call to generate_notification with ALL event-audience-language combinations.
+    
     Follow these steps:
     1. Use find_events to get {events_count} events in the specified city
-    2. Use get_languages once to get the main language for the city
-    3. For EACH event:
-       - Classify it using classify_event
-       - Generate a notification using generate_notification for the identified audience and language
+    2. Use get_languages once to get the top 3 languages for the city
+    3. For each event:
+       - Classify it using classify_event (will give you up to 3 audiences)
+       - Select up to 2 primary audiences
+    4. Create a SINGLE array containing ALL combinations:
+       - Each item: {{event, audience, language}}
+       - {events_count} events × 2 audiences × 3 languages = up to {events_count * 6} items
+    5. Make ONE call to generate_notification with this complete array
     
     Your final output should include exactly {events_count} events, each with:
     - Event details
-    - Classification (size, importance, 1 audience)
-    - 1 notification (1 audience × 1 language)
+    - Classification (size, importance, up to 3 audiences)
+    - Notifications (up to 2 audiences × 3 languages = up to 6 notifications per event)
+    
+    REMEMBER: Only ONE call to generate_notification with ALL combinations at once!
     """
     
     return Agent(
@@ -475,7 +518,7 @@ async def main_async():
     
     args = parser.parse_args()
     
-    # Register custom trace processor if debug logging is enabled
+    # Add debug trace processor if debug logging is enabled
     if os.getenv("LOG_LEVEL", "INFO").upper() == "DEBUG":
         from agents.tracing import add_trace_processor
         debug_processor = DebugTraceProcessor()
@@ -491,6 +534,13 @@ async def main_async():
         if not config.openai_api_key:
             logger.error("OPENAI_API_KEY environment variable is required")
             sys.exit(1)
+            
+        # Initialize OpenAI agents SDK with API key
+        agents.set_default_openai_key(config.openai_api_key)
+        
+        # Tracing is enabled by default in the agents SDK
+        if os.getenv("ENABLE_TRACING", "true").lower() == "true":
+            logger.info("Tracing is enabled - traces will be exported to OpenAI console")
         
         # Process the city with tracing
         logger.info(f"Processing city: {args.city} for {args.events} events")
@@ -535,6 +585,15 @@ async def main_async():
                 print(f"{'=' * 50}")
                 print(f"Description: {event['description']}")
                 print(f"Location: {event['location']}")
+                
+                # Extract venue and address if the location contains a comma
+                location_parts = event['location'].split(',', 1)
+                if len(location_parts) > 1:
+                    venue = location_parts[0].strip()
+                    address = location_parts[1].strip()
+                    print(f"Venue: {venue}")
+                    print(f"Address: {address}")
+                
                 print(f"Date: {event['start_date']}")
                 if event['end_date']:
                     print(f"End Date: {event['end_date']}")
@@ -562,6 +621,9 @@ async def main_async():
     except Exception as e:
         logger.exception(f"Error running Dora: {e}")
         sys.exit(1)
+    finally:
+        # The agents SDK handles trace export automatically
+        pass
 
 
 def main():
