@@ -403,10 +403,12 @@ async def send_results(update: Update, city: str, results: list) -> None:
         message += f"👥 Audience: {', '.join(classification['target_audiences'])}\n"
         
         if notifications:
-            message += f"\n**Notification:**\n"
-            # Just use the first notification for simplicity
-            notification = notifications[0]
-            message += f"💬 _{notification['text']}_"
+            message += f"\n**Notifications:**\n"
+            # Show all notifications with language and group
+            for notification in notifications:
+                language = notification.get('language', 'en')
+                group = notification.get('context', {}).get('group_id', 'default')
+                message += f"💬 [{language}/{group}] _{notification['text']}_\n"
         
         # Send the event message
         try:
