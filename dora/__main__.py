@@ -137,6 +137,9 @@ def create_event_finder_agent(config: DoraConfig, events_count: int = 10) -> Age
     @function_tool
     def search_events_perplexity(query: str) -> EventSearchResult:
         """Search for events using Perplexity API."""
+        # Make sure query includes 'upcoming' to prioritize future events
+        if 'upcoming' not in query.lower():
+            query = query.replace('events', 'upcoming events', 1)
         return perplexity_search(query, config.perplexity_api_key)
     
     instructions = f"""
@@ -144,13 +147,15 @@ def create_event_finder_agent(config: DoraConfig, events_count: int = 10) -> Age
     
     When given a city name, find EXACTLY {events_count} events happening in the next two weeks.
     
-    Use the search_events_perplexity tool with the query: "[city name] events next 2 weeks".
+    Use the search_events_perplexity tool with the query: "[city name] upcoming events next 2 weeks".
     
     IMPORTANT REQUIREMENTS:
     - ONLY include events with SPECIFIC addresses (e.g., "123 Main St", "Golden Gate Park")
     - ONLY include events with SPECIFIC dates (e.g., "2025-05-20", not "various dates")
     - DO NOT include generic listings like "various shows", "multiple performances", or "ongoing exhibitions"
     - Each event must have a unique, specific occurrence with exact date and location
+    - STRICTLY EXCLUDE all past events - ONLY include future events happening from today onwards
+    - Check the date format and ensure all events have dates that are in the future
     
     From the search results, extract exactly {events_count} events with:
     1. Event name (specific event, not a generic listing)
@@ -160,6 +165,7 @@ def create_event_finder_agent(config: DoraConfig, events_count: int = 10) -> Age
     5. URL (if available, or use "https://example.com" as default)
     
     Output exactly {events_count} events - no more, no less. Stop after {events_count} events.
+    FINAL CHECK: Verify all event dates are in the future before returning results.
     """
     
     return Agent(
@@ -348,11 +354,17 @@ def format_notification_for_display(notification: FinalResult) -> Dict:
     classification = notification.classification
     notifications = notification.notifications
     
-    # Format dates
+    # Format dates and check they are not in the past
     start_date = event.start_date
+    current_date = datetime.now()
+    is_future_event = True
+    
     if isinstance(start_date, str):
         try:
-            start_date = datetime.fromisoformat(start_date.replace('Z', '+00:00')).strftime("%Y-%m-%d %H:%M")
+            date_obj = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
+            # Check if the event is in the past (before today)
+            is_future_event = date_obj.date() >= current_date.date()
+            start_date = date_obj.strftime("%Y-%m-%d %H:%M")
         except (ValueError, TypeError):
             pass
     
@@ -364,6 +376,11 @@ def format_notification_for_display(notification: FinalResult) -> Dict:
             end_date = None
     else:
         end_date = None
+    
+    # Skip events with dates in the past
+    if not is_future_event:
+        logger.warning(f"Skipping past event: {event.name} with date {start_date}")
+        return None
     
     return {
         "event": {
@@ -468,7 +485,8 @@ async def process_city(city: str, days_ahead: int = 14, events_count: int = 10, 
     )
     
     # Run the orchestrator with tracing
-    prompt = f"Process events in {city} for the next {days_ahead} days."
+    today = datetime.now().strftime("%Y-%m-%d")
+    prompt = f"Process events in {city} for the next {days_ahead} days, starting from today ({today}). ONLY include events happening today or in the future."
     
     with trace(f"ProcessCity:{city}") as process_trace:
         process_trace.metadata = {"city": city, "days_ahead": str(days_ahead), "events_count": str(events_count)}
@@ -569,8 +587,14 @@ async def main_async():
             print(f"No events found in {args.city}")
             return
         
-        # Format results for display
+        # Format results for display and filter out None values (past events)
         formatted_results = [format_notification_for_display(result) for result in results]
+        formatted_results = [result for result in formatted_results if result is not None]
+        
+        if not formatted_results:
+            logger.info(f"No valid future events found in {args.city}")
+            print(f"No valid future events found in {args.city}")
+            return
         
         if args.output == "json":
             print(json.dumps(formatted_results, indent=2))
