@@ -1,17 +1,9 @@
-# Git
-.git
-.gitignore
-
 # Python
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
 .Python
-.venv/
-venv/
-ENV/
-env/
 build/
 develop-eggs/
 dist/
@@ -24,30 +16,69 @@ parts/
 sdist/
 var/
 wheels/
+pip-wheel-metadata/
+share/python-wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+MANIFEST
 
-# Editor directories and files
+# Virtual environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Testing
+.pytest_cache/
+coverage.*
+.coverage
+htmlcov/
+.tox/
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# IDE
 .idea/
 .vscode/
 *.swp
 *.swo
+*~
+
+# OS
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
 
-# Local environment files
-.env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
+# Project specific
+cache/
+logs/
+*.log
+test_*.py
+tests/
+CLAUDE.md
+plan.md
+run.sh
+run_memory_server.sh
 
-# Tests
-.pytest_cache/
-.coverage
-htmlcov/
+# Git
+.git/
+.gitignore
+.github/
 
-# Docker
-Dockerfile
-docker-compose.yml
-.dockerignore
+# Documentation
+README.md
+docker-compose.README.md
+
+# Keep these
+!dora/
+!pyproject.toml
+!uv.lock

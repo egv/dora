@@ -2,13 +2,24 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Copy requirements file and install dependencies
-COPY pyproject.toml .
-COPY README.md .
+# Install system dependencies
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    gcc \
+    python3-dev \
+    && rm -rf /var/lib/apt/lists/*
 
-# Install build dependencies
-RUN pip install --no-cache-dir "uv==0.1.16" && \
-    uv pip install --no-cache-dir -e .
+# Install UV
+RUN pip install --no-cache-dir uv
+
+# Copy project files
+COPY pyproject.toml uv.lock README.md ./
+
+# Create cache and logs directories
+RUN mkdir -p /app/cache /app/logs
+
+# Install Python dependencies using UV
+RUN uv sync --frozen
 
 # Copy application code
 COPY dora ./dora
@@ -23,5 +34,5 @@ RUN useradd -m dora && \
 
 USER dora
 
-# Run the application
-ENTRYPOINT ["python", "-m", "dora"]
+# Default command (can be overridden in docker-compose)
+CMD ["uv", "run", "python", "-m", "dora", "--help"]
