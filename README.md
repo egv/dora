@@ -41,7 +41,7 @@ uv venv
 source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 
 # Install dependencies
-uv pip install -e .
+uv sync
 ```
 
 ## Configuration
@@ -112,7 +112,7 @@ docker-compose run --rm dora --city "London" --output json
 
 ```bash
 # Install development dependencies
-uv pip install -e ".[dev]"
+uv sync
 
 # Run tests
 pytest
