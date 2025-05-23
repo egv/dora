@@ -6,7 +6,7 @@ import time
 from typing import Any, Dict, List, Optional
 
 import httpx
-from openai_agents import function_tool
+from agents import function_tool
 from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
