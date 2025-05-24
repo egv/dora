@@ -9,7 +9,7 @@ import sys
 from datetime import datetime
 from typing import Dict, List, Optional
 
-from agents import Agent, ModelSettings, Runner, trace, function_tool, set_default_openai_key
+from agents import Agent, ModelSettings, Runner, trace, function_tool, set_default_openai_key, WebSearchTool
 from openai import AsyncOpenAI
 from pydantic import BaseModel, Field
 import time
@@ -130,23 +130,13 @@ def create_event_finder_agent(config: DoraConfig, events_count: int = 10) -> Age
     Returns:
         Event finder agent
     """
-    # Import the internal function
-    from dora.tools import perplexity_search
-    
-    @function_tool
-    def search_events_perplexity(query: str) -> EventSearchResult:
-        """Search for events using Perplexity API."""
-        # Make sure query includes 'upcoming' to prioritize future events
-        if 'upcoming' not in query.lower():
-            query = query.replace('events', 'upcoming events', 1)
-        return perplexity_search(query, config.perplexity_api_key)
-    
     instructions = f"""
     You are an event finder agent that discovers events in cities.
     
     When given a city name, find EXACTLY {events_count} events happening in the next two weeks.
     
-    Use the search_events_perplexity tool with the query: "[city name] upcoming events next 2 weeks".
+    Use the web search tool to search for: "[city name] upcoming events next 2 weeks concerts theater festivals sports" and similar queries.
+    IMPORTANT: Search in the same language as the city name provided. If the city is "Paris", search in French. If "東京", search in Japanese.
     
     IMPORTANT REQUIREMENTS:
     - ONLY include events with SPECIFIC addresses (e.g., "123 Main St", "Golden Gate Park")
@@ -172,7 +162,7 @@ def create_event_finder_agent(config: DoraConfig, events_count: int = 10) -> Age
         instructions=instructions,
         model=config.event_finder_config.model,
         model_settings=ModelSettings(temperature=config.event_finder_config.temperature),
-        tools=[search_events_perplexity],
+        tools=[WebSearchTool()],
         output_type=EventsOutputSchema,
     )
 

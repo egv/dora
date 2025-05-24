@@ -313,9 +313,37 @@ async def handle_city(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     
     # Send initial message
     processing_msg = await update.message.reply_text(
-        f"🔍 Searching for events in {city}...\n"
-        "This may take a moment."
+        f"🔍 Initializing search for events in {city}...\n"
+        "This may take 1-2 minutes."
     )
+    
+    # Progress tracking
+    progress_steps = {
+        "INITIALIZING": "🔧 Setting up search system...",
+        "CREATING_AGENTS": "🤖 Preparing AI agents...",
+        "BUILDING_TOOLS": "⚙️ Building processing tools...",
+        "STARTING_SEARCH": "🔍 Starting event discovery...",
+        "RUNNING_ORCHESTRATOR": "🎭 Finding and analyzing events...",
+        "PROCESSING_RESULTS": "📊 Processing and formatting results...",
+        "COMPLETED": "✅ Search completed!"
+    }
+    
+    async def progress_callback(step: str, details: str):
+        """Update the user with progress information."""
+        try:
+            if step in progress_steps:
+                progress_text = progress_steps[step]
+                if details:
+                    progress_text += f"\n{details}"
+                
+                await processing_msg.edit_text(
+                    f"🔍 **Searching for events in {city}**\n\n"
+                    f"{progress_text}",
+                    parse_mode="Markdown"
+                )
+        except Exception as e:
+            # If message editing fails, don't crash - just log it
+            logger.debug(f"Failed to update progress message: {e}")
     
     try:
         # Get the config
@@ -327,9 +355,15 @@ async def handle_city(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         else:
             events_count = 10
         
-        # Process the city
+        # Process the city with progress updates
         logger.info(f"Processing city: {city} for user: {update.effective_user.username}")
-        results = await process_city(city=city, days_ahead=14, events_count=events_count, config=config)
+        results = await process_city(
+            city=city, 
+            days_ahead=14, 
+            events_count=events_count, 
+            config=config,
+            progress_callback=progress_callback
+        )
         
         # Delete the processing message
         try:
@@ -365,22 +399,35 @@ async def send_results(update: Update, city: str, results: list) -> None:
         user = update.effective_user
         mention = f"@{user.username}, " if user.username else ""
     
+    # Filter out past events first
+    valid_events = []
+    for result in results:
+        formatted = format_notification_for_display(result)
+        if formatted is not None:
+            valid_events.append(formatted)
+    
+    if not valid_events:
+        await update.message.reply_text(
+            f"{mention}❌ No upcoming events found in {city}. All events found were in the past.",
+            parse_mode="Markdown"
+        )
+        return
+    
     # Send header
     await update.message.reply_text(
         f"{mention}🎉 **Events in {city}**\n\n"
-        f"Found {len(results)} exciting events!",
+        f"Found {len(valid_events)} exciting events!",
         parse_mode="Markdown"
     )
     
     # Send each event as a separate message
-    for i, result in enumerate(results, 1):
-        formatted = format_notification_for_display(result)
+    for event_count, formatted in enumerate(valid_events, 1):
         event = formatted["event"]
         classification = formatted["classification"]
         notifications = formatted["notifications"]
         
         # Format the message
-        message = f"**{i}. {event['name']}**\n"
+        message = f"**{event_count}. {event['name']}**\n"
         message += f"📅 {event['start_date']}\n"
         if event['end_date']:
             message += f"📅 End: {event['end_date']}\n"
@@ -477,9 +524,14 @@ def main() -> None:
 if __name__ == "__main__":
     # Set up logging
     logging.basicConfig(
-        level=logging.DEBUG,  # Changed to DEBUG for troubleshooting
+        level=logging.INFO,
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
     )
+    
+    # Reduce verbosity for third-party libraries
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("telegram").setLevel(logging.WARNING)
+    logging.getLogger("urllib3").setLevel(logging.WARNING)
     
     # Run the bot
     main()
