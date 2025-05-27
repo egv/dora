@@ -15,12 +15,26 @@ class DebugTraceProcessor(TracingProcessor):
         logger.info(f"[TRACE START] {trace.name} (ID: {trace.trace_id})")
         if hasattr(trace, 'metadata') and trace.metadata:
             logger.info(f"[TRACE METADATA] {trace.metadata}")
+        
+        # Also log to console for immediate visibility
+        print(f"🔍 Starting: {trace.name}")
+        if hasattr(trace, 'metadata') and trace.metadata:
+            city = trace.metadata.get('city', 'Unknown')
+            events_count = trace.metadata.get('events_count', 'Unknown')
+            print(f"   City: {city}, Events: {events_count}")
     
     def on_trace_end(self, trace: Trace) -> None:
         """Called when a trace finishes."""
         logger.info(f"[TRACE END] {trace.name} (ID: {trace.trace_id})")
         if hasattr(trace, 'metadata') and trace.metadata:
             logger.info(f"[TRACE FINAL METADATA] {trace.metadata}")
+        
+        # Also log to console for immediate visibility
+        print(f"✅ Completed: {trace.name}")
+        if hasattr(trace, 'metadata') and trace.metadata:
+            duration = trace.metadata.get('duration_seconds', 'Unknown')
+            events_found = trace.metadata.get('events_found', 'Unknown')
+            print(f"   Duration: {duration}s, Events found: {events_found}")
         
         # Log spans within the trace
         if hasattr(trace, 'spans'):
@@ -37,7 +51,8 @@ class DebugTraceProcessor(TracingProcessor):
         elif hasattr(span, 'data') and hasattr(span.data, 'name'):
             span_name = span.data.name
             
-        logger.debug(f"[SPAN START] {span_name} (ID: {span.span_id})")
+        logger.info(f"[SPAN START] {span_name} (ID: {span.span_id})")
+        print(f"⚡ Starting step: {span_name}")
     
     def on_span_end(self, span: Span[Any]) -> None:
         """Called when a span finishes."""
@@ -48,7 +63,8 @@ class DebugTraceProcessor(TracingProcessor):
         elif hasattr(span, 'data') and hasattr(span.data, 'name'):
             span_name = span.data.name
             
-        logger.debug(f"[SPAN END] {span_name} (ID: {span.span_id})")
+        logger.info(f"[SPAN END] {span_name} (ID: {span.span_id})")
+        print(f"✅ Completed step: {span_name}")
     
     def shutdown(self) -> None:
         """Called when the application stops."""

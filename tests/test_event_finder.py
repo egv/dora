@@ -2,13 +2,13 @@
 import asyncio
 from dora.__main__ import create_event_finder_agent
 from dora.models.config import DoraConfig
-from agents import Runner
+from openai_agents import Runner
 
 async def test_event_finder():
     config = DoraConfig()
     
     # Set the OpenAI API key
-    import agents
+    import openai_agents as agents
     agents.set_default_openai_key(config.openai_api_key)
     
     # Create the event finder agent
