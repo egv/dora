@@ -36,32 +36,32 @@ TELEGRAM_API_KEY=your_telegram_bot_token
 
 Start both HTTP server and Telegram bot:
 ```bash
-docker-compose up -d
+docker compose up -d
 ```
 
 Start only the HTTP server:
 ```bash
-docker-compose up -d http-server
+docker compose up -d http-server
 ```
 
 Start only the Telegram bot (will also start HTTP server):
 ```bash
-docker-compose up -d telegram-bot
+docker compose up -d telegram-bot
 ```
 
 View logs:
 ```bash
 # All services
-docker-compose logs -f
+docker compose logs -f
 
 # Specific service
-docker-compose logs -f telegram-bot
-docker-compose logs -f http-server
+docker compose logs -f telegram-bot
+docker compose logs -f http-server
 ```
 
 Stop all services:
 ```bash
-docker-compose down
+docker compose down
 ```
 
 ### Testing the HTTP Server
@@ -88,12 +88,12 @@ curl -X POST http://localhost:8000/v1/chat/completions \
 
 Run a one-time city query:
 ```bash
-docker-compose run --rm dora-cli uv run python -m dora --city "London" --output pretty
+docker compose run --rm dora-cli uv run python -m dora --city "London" --output pretty
 ```
 
 Or use the interactive CLI:
 ```bash
-docker-compose run --rm dora-cli bash
+docker compose run --rm dora-cli bash
 # Then inside the container:
 uv run python -m dora --city "Paris"
 ```
@@ -102,7 +102,7 @@ uv run python -m dora --city "Paris"
 
 Process a specific city:
 ```bash
-docker-compose run --rm dora uv run python -m dora --city "Tokyo" --events 5
+docker compose run --rm dora uv run python -m dora --city "Tokyo" --events 5
 ```
 
 ## Volumes
@@ -129,19 +129,19 @@ All services support these environment variables:
 
 Build all images:
 ```bash
-docker-compose build
+docker compose build
 ```
 
 Build a specific service:
 ```bash
-docker-compose build telegram-bot
+docker compose build telegram-bot
 ```
 
 ## Monitoring
 
 View cache statistics:
 ```bash
-docker-compose exec telegram-bot sqlite3 /app/cache/dora_memory.db "SELECT * FROM cache_metadata;"
+docker compose exec telegram-bot sqlite3 /app/cache/dora_memory.db "SELECT * FROM cache_metadata;"
 ```
 
 ## Troubleshooting
@@ -154,7 +154,7 @@ docker-compose exec telegram-bot sqlite3 /app/cache/dora_memory.db "SELECT * FRO
 
 For development with hot-reloading:
 ```bash
-docker-compose run --rm -v $(pwd):/app dora-cli bash
+docker compose run --rm -v $(pwd):/app dora-cli bash
 ```
 
 This mounts your local code directory into the container for live updates.
