@@ -2,14 +2,16 @@
 
 import time
 import uuid
-from typing import Dict, List, Optional, Union, Any
+from typing import Dict, List, Optional, Union, Any, Type
 from datetime import datetime
 
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Header
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, create_model, Field as PydanticField
 import logging
+import json as json_module
+from agents import Agent, ModelSettings, Runner, set_default_openai_key
 
 from dora.models.config import DoraConfig
 from dora.models.event import EventNotification
@@ -181,6 +183,7 @@ class ChatCompletionHandler:
         """Initialize the handler."""
         self.config = config
         self._message_parser = MessageParser(config.openai_api_key)
+        set_default_openai_key(config.openai_api_key)
     
     def _format_events_as_text(self, events: List[EventNotification]) -> str:
         """Format events as natural language text."""
@@ -203,6 +206,108 @@ class ChatCompletionHandler:
             lines.append("")
         
         return "\n".join(lines)
+    
+    def _create_pydantic_model_from_schema(self, schema: Dict[str, Any], model_name: str = "ResponseModel") -> Type[BaseModel]:
+        """Create a Pydantic model from JSON schema."""
+        if schema.get("type") != "object" or "properties" not in schema:
+            raise ValueError("Schema must be an object with properties")
+        
+        fields = {}
+        properties = schema.get("properties", {})
+        required = schema.get("required", [])
+        
+        for field_name, field_schema in properties.items():
+            field_type = Any  # Default type
+            field_default = ... if field_name in required else None
+            
+            # Map JSON schema types to Python types
+            if field_schema.get("type") == "string":
+                field_type = str
+            elif field_schema.get("type") == "number":
+                field_type = float
+            elif field_schema.get("type") == "integer":
+                field_type = int
+            elif field_schema.get("type") == "boolean":
+                field_type = bool
+            elif field_schema.get("type") == "array":
+                items_schema = field_schema.get("items", {})
+                if items_schema.get("type") == "object" and "properties" in items_schema:
+                    # Create nested model for array items
+                    item_model = self._create_pydantic_model_from_schema(
+                        items_schema, 
+                        model_name=f"{model_name}_{field_name}_Item"
+                    )
+                    field_type = List[item_model]
+                elif items_schema.get("type") == "string":
+                    field_type = List[str]
+                elif items_schema.get("type") == "integer":
+                    field_type = List[int]
+                else:
+                    field_type = List[Any]
+            elif field_schema.get("type") == "object":
+                if "properties" in field_schema:
+                    # Create nested model
+                    nested_model = self._create_pydantic_model_from_schema(
+                        field_schema,
+                        model_name=f"{model_name}_{field_name}"
+                    )
+                    field_type = nested_model
+                else:
+                    field_type = Dict[str, Any]
+            
+            description = field_schema.get("description", "")
+            fields[field_name] = (field_type, PydanticField(default=field_default, description=description))
+        
+        return create_model(model_name, **fields)
+    
+    async def _format_with_agent(self, events: List[EventNotification], schema: Dict[str, Any]) -> str:
+        """Format events using an agent with the provided schema."""
+        # Create Pydantic model from schema
+        output_model = self._create_pydantic_model_from_schema(schema)
+        
+        # Create formatting agent
+        agent = Agent(
+            name="EventFormatter",
+            instructions="""You are a JSON formatter that converts event data into the requested format.
+            Take the provided event notifications and format them according to the output schema.
+            Ensure all required fields are populated and the output is valid JSON.""",
+            model="gpt-4o-mini",
+            model_settings=ModelSettings(temperature=0),
+            output_type=output_model
+        )
+        
+        # Prepare input data
+        events_data = []
+        for notification in events:
+            event = notification.event
+            events_data.append({
+                "event": {
+                    "name": event.name,
+                    "location": event.location,
+                    "start_date": event.start_date,
+                    "end_date": event.end_date,
+                    "description": event.description,
+                    "url": event.url
+                },
+                "classification": {
+                    "size": notification.classification.size,
+                    "importance": notification.classification.importance,
+                    "target_audiences": [aud.model_dump() if hasattr(aud, 'model_dump') else str(aud) for aud in notification.classification.target_audiences]
+                } if notification.classification else None,
+                "notifications": [
+                    {
+                        "text": notif.text,
+                        "language": notif.language,
+                        "audience": notif.audience.model_dump() if hasattr(notif.audience, 'model_dump') else str(notif.audience)
+                    } for notif in (notification.notifications or [])
+                ]
+            })
+        
+        # Run the agent
+        result = await Runner.run(agent, json_module.dumps({"events": events_data}))
+        
+        # Return the formatted JSON
+        return json_module.dumps(result.final_output.model_dump())
     
     def _format_events_as_json(self, events: List[EventNotification]) -> str:
         """Format events as JSON with full notification data."""
@@ -267,7 +372,9 @@ class ChatCompletionHandler:
             
             # Format the response based on response_format
             if request.response_format and request.response_format.type == "json_schema":
-                response_content = self._format_events_as_json(results)
+                # Use agent-based formatting with the provided schema
+                schema = request.response_format.json_schema.get("schema", {})
+                response_content = await self._format_with_agent(results, schema)
             else:
                 response_content = self._format_events_as_text(results)
             
