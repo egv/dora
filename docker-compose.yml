@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # HTTP Server
   http-server:
@@ -27,7 +25,7 @@ services:
       - dora-network
     ports:
       - "8000:8000"
-    command: ["uv", "run", "python", "-m", "dora.http_server"]
+    command: ["uv", "run", "python", "run_http_server.py"]
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
@@ -61,7 +59,7 @@ services:
     depends_on:
       http-server:
         condition: service_healthy
-    command: ["uv", "run", "python", "-m", "dora.telegram_bot"]
+    command: ["uv", "run", "python", "run_bot.py"]
 
   # CLI interface for testing
   dora-cli:

@@ -24,6 +24,7 @@ RUN uv sync --frozen
 
 # Copy application code
 COPY dora ./dora
+COPY run_bot.py run_http_server.py ./
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
