@@ -638,7 +638,7 @@ async def process_city(city: str, days_ahead: int = 14, events_count: int = 10, 
                     notification_input = {
                         "event": event_dict,
                         "audience": {
-                            "demographic": audience,
+                            "demographic": audience.model_dump() if hasattr(audience, 'model_dump') else audience,
                             "interests": [],
                             "tech_savvy": True,
                             "local": True

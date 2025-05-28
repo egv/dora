@@ -104,7 +104,7 @@ async def process_events_with_cache(
                 notification_input = {
                     "event": event_dict,
                     "audience": {
-                        "demographic": audience,
+                        "demographic": audience.model_dump() if hasattr(audience, 'model_dump') else audience,
                         "interests": [],
                         "tech_savvy": True,
                         "local": True
