@@ -372,9 +372,13 @@ class ChatCompletionHandler:
             
             # Format the response based on response_format
             if request.response_format and request.response_format.type == "json_schema":
-                # Use agent-based formatting with the provided schema
                 schema = request.response_format.json_schema.get("schema", {})
-                response_content = await self._format_with_agent(results, schema)
+                if schema and "properties" in schema:
+                    # Use agent-based formatting with a valid schema
+                    response_content = await self._format_with_agent(results, schema)
+                else:
+                    # Invalid or empty schema, return default JSON format
+                    response_content = self._format_events_as_json(results)
             else:
                 response_content = self._format_events_as_text(results)
             

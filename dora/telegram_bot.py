@@ -368,8 +368,8 @@ async def handle_city(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         # Update progress to show we're processing
         await progress_callback("RUNNING_ORCHESTRATOR", "Processing through HTTP interface...")
         
-        # Create a proper chat completion request with JSON response format
-        response = await client.chat_completion_with_json(
+        # Create HTTP request - don't use JSON schema, just get regular response
+        response = await client.chat_completion(
             message=message,
             temperature=0.0,
             model="dora-events-v1"
