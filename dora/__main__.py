@@ -571,7 +571,7 @@ async def process_city(city: str, days_ahead: int = 14, events_count: int = 10, 
         )
         
         find_events_duration = time.time() - find_events_start
-        events = event_result.output.events if event_result.output else []
+        events = event_result.final_output.events if event_result.final_output else []
         logger.info(f"Found {len(events)} events in {find_events_duration:.2f}s")
         
         # Step 2: Get languages for the city
@@ -583,7 +583,7 @@ async def process_city(city: str, days_ahead: int = 14, events_count: int = 10, 
             city
         )
         
-        languages = language_result.output.languages if language_result.output else ["en"]
+        languages = language_result.final_output.languages if language_result.final_output else ["en"]
         lang_duration = time.time() - lang_start
         logger.info(f"Found languages {languages} in {lang_duration:.2f}s")
         
@@ -623,9 +623,9 @@ async def process_city(city: str, days_ahead: int = 14, events_count: int = 10, 
             
             classification_result = await Runner.run(
                 event_classifier,
-                event_dict
+                json.dumps(event_dict)
             )
-            classification = classification_result.output.classification
+            classification = classification_result.final_output.classification
             classify_duration = time.time() - classify_start
             logger.info(f"Classified event in {classify_duration:.2f}s")
             
@@ -653,11 +653,11 @@ async def process_city(city: str, days_ahead: int = 14, events_count: int = 10, 
                     
                     notification_result = await Runner.run(
                         text_writer,
-                        notification_input
+                        json.dumps(notification_input)
                     )
                     
-                    if notification_result.output and notification_result.output.notifications:
-                        for notif in notification_result.output.notifications:
+                    if notification_result.final_output and notification_result.final_output.notifications:
+                        for notif in notification_result.final_output.notifications:
                             # Add language and group info to notification
                             notif_dict = notif.model_dump()
                             notif_dict["language"] = language
