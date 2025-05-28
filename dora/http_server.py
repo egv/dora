@@ -228,8 +228,8 @@ class ChatCompletionHandler:
                         "text": notif.text,
                         "language": notif.language,
                         "context": {
-                            "group_id": notif.context.group_id if notif.context else "default"
-                        } if notif.context else None
+                            "group_id": getattr(notif, 'context', {}).get('group_id', 'general') if hasattr(notif, 'context') else {"group_id": "general"}
+                        }
                     } for notif in (notification.notifications or [])
                 ]
             })
