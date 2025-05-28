@@ -19,7 +19,7 @@ class APIConfig(BaseModel):
     """API Configuration."""
 
     openai_api_key: str
-    perplexity_api_key: str
+    perplexity_api_key: Optional[str] = None  # Deprecated - using WebSearchTool instead
 
 
 class DoraConfig(BaseSettings):
@@ -27,7 +27,7 @@ class DoraConfig(BaseSettings):
 
     # API Keys
     openai_api_key: str = Field(default="", env="OPENAI_API_KEY")
-    perplexity_api_key: str = Field(default="", env="PERPLEXITY_API_KEY")
+    perplexity_api_key: Optional[str] = Field(default=None, env="PERPLEXITY_API_KEY")  # Deprecated - using WebSearchTool
     telegram_api_key: str = Field(default="", env="TELEGRAM_API_KEY")
     
     # Memory cache configuration
@@ -49,7 +49,7 @@ class DoraConfig(BaseSettings):
         default_factory=lambda: AgentConfig(
             model="gpt-4o",
             temperature=0.7,
-            system_prompt="You are an event finder agent that finds events in a specified city using Perplexity API."
+            system_prompt="You are an event finder agent that finds events in a specified city using web search."
         )
     )
     
@@ -88,5 +88,5 @@ class DoraConfig(BaseSettings):
         """Get API configuration."""
         return APIConfig(
             openai_api_key=self.openai_api_key,
-            perplexity_api_key=self.perplexity_api_key,
+            perplexity_api_key=self.perplexity_api_key,  # Deprecated but kept for compatibility
         )

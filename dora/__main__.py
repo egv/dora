@@ -9,8 +9,7 @@ import sys
 from datetime import datetime
 from typing import Dict, List, Optional
 
-import agents
-from agents import Agent, ModelSettings, Runner, trace
+from agents import Agent, ModelSettings, Runner, trace, function_tool, set_default_openai_key, WebSearchTool
 from openai import AsyncOpenAI
 from pydantic import BaseModel, Field
 import time
@@ -44,10 +43,13 @@ logging.basicConfig(
     handlers=[logging.StreamHandler()],
 )
 
-# Enable debug logging for agents library when tracing is enabled
-if os.getenv("ENABLE_TRACING", "true").lower() == "true":
-    logging.getLogger("agents").setLevel(logging.DEBUG)
-    logging.getLogger("openai").setLevel(logging.DEBUG)
+# Reduce verbosity for third-party libraries to avoid request body logging
+logging.getLogger("openai_agents").setLevel(logging.WARNING)
+logging.getLogger("openai").setLevel(logging.WARNING)
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("urllib3").setLevel(logging.WARNING)
+logging.getLogger("requests").setLevel(logging.WARNING)
+logging.getLogger("telegram").setLevel(logging.WARNING)
 
 logger = logging.getLogger(__name__)
 
@@ -129,29 +131,21 @@ def create_event_finder_agent(config: DoraConfig, events_count: int = 10) -> Age
     Returns:
         Event finder agent
     """
-    # Import the internal function
-    from dora.tools import perplexity_search
-    
-    # Create a Perplexity search tool with the API key bound
-    from agents import function_tool
-    
-    @function_tool
-    def search_events_perplexity(query: str) -> EventSearchResult:
-        """Search for events using Perplexity API."""
-        return perplexity_search(query, config.perplexity_api_key)
-    
     instructions = f"""
     You are an event finder agent that discovers events in cities.
     
     When given a city name, find EXACTLY {events_count} events happening in the next two weeks.
     
-    Use the search_events_perplexity tool with the query: "[city name] events next 2 weeks".
+    Use the web search tool to search for: "[city name] upcoming events next 2 weeks concerts theater festivals sports" and similar queries.
+    IMPORTANT: Search in the same language as the city name provided. If the city is "Paris", search in French. If "東京", search in Japanese.
     
     IMPORTANT REQUIREMENTS:
     - ONLY include events with SPECIFIC addresses (e.g., "123 Main St", "Golden Gate Park")
     - ONLY include events with SPECIFIC dates (e.g., "2025-05-20", not "various dates")
     - DO NOT include generic listings like "various shows", "multiple performances", or "ongoing exhibitions"
     - Each event must have a unique, specific occurrence with exact date and location
+    - STRICTLY EXCLUDE all past events - ONLY include future events happening from today onwards
+    - Check the date format and ensure all events have dates that are in the future
     
     From the search results, extract exactly {events_count} events with:
     1. Event name (specific event, not a generic listing)
@@ -161,6 +155,7 @@ def create_event_finder_agent(config: DoraConfig, events_count: int = 10) -> Age
     5. URL (if available, or use "https://example.com" as default)
     
     Output exactly {events_count} events - no more, no less. Stop after {events_count} events.
+    FINAL CHECK: Verify all event dates are in the future before returning results.
     """
     
     return Agent(
@@ -168,7 +163,7 @@ def create_event_finder_agent(config: DoraConfig, events_count: int = 10) -> Age
         instructions=instructions,
         model=config.event_finder_config.model,
         model_settings=ModelSettings(temperature=config.event_finder_config.temperature),
-        tools=[search_events_perplexity],
+        tools=[WebSearchTool()],
         output_type=EventsOutputSchema,
     )
 
@@ -308,16 +303,20 @@ def create_orchestrator_agent(config: DoraConfig, events_count: int = 10) -> Age
     
     CRITICAL: Make ONLY ONE call to generate_notification with ALL event-audience-language combinations.
     
-    Follow these steps:
-    1. Use find_events to get {events_count} events in the specified city
-    2. Use get_languages once to get the top 3 languages for the city
-    3. For each event:
-       - Classify it using classify_event (will give you up to 3 audiences)
-       - Select up to 2 primary audiences
-    4. Create a SINGLE array containing ALL combinations:
+    Follow these steps and ANNOUNCE each step clearly:
+    1. STEP 1: Use find_events to get {events_count} events in the specified city
+       - Say "Finding events in [city]..."
+    2. STEP 2: Use get_languages once to get the top 3 languages for the city
+       - Say "Getting languages for [city]..."
+    3. STEP 3: For each event, classify it using classify_event
+       - Say "Classifying event X of Y: [event name]..."
+       - Select up to 2 primary audiences from the classification
+    4. STEP 4: Create notification combinations
+       - Say "Creating notification combinations for all events..."
        - Each item: {{event, audience, language}}
        - {events_count} events × 2 audiences × 3 languages = up to {events_count * 6} items
-    5. Make ONE call to generate_notification with this complete array
+    5. STEP 5: Make ONE call to generate_notification with this complete array
+       - Say "Generating all notifications..."
     
     Your final output should include exactly {events_count} events, each with:
     - Event details
@@ -349,11 +348,17 @@ def format_notification_for_display(notification: FinalResult) -> Dict:
     classification = notification.classification
     notifications = notification.notifications
     
-    # Format dates
+    # Format dates and check they are not in the past
     start_date = event.start_date
+    current_date = datetime.now()
+    is_future_event = True
+    
     if isinstance(start_date, str):
         try:
-            start_date = datetime.fromisoformat(start_date.replace('Z', '+00:00')).strftime("%Y-%m-%d %H:%M")
+            date_obj = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
+            # Check if the event is in the past (before today)
+            is_future_event = date_obj.date() >= current_date.date()
+            start_date = date_obj.strftime("%Y-%m-%d %H:%M")
         except (ValueError, TypeError):
             pass
     
@@ -365,6 +370,11 @@ def format_notification_for_display(notification: FinalResult) -> Dict:
             end_date = None
     else:
         end_date = None
+    
+    # Skip events with dates in the past
+    if not is_future_event:
+        logger.warning(f"Skipping past event: {event.name} with date {start_date}")
+        return None
     
     return {
         "event": {
@@ -398,7 +408,7 @@ def create_venv_if_needed():
         os.system("uv venv")
 
 
-async def process_city_original(city: str, days_ahead: int = 14, events_count: int = 10, config: Optional[DoraConfig] = None):
+async def process_city_original(city: str, days_ahead: int = 14, events_count: int = 10, config: Optional[DoraConfig] = None, progress_callback: Optional[callable] = None):
     """Process a city to find events and generate notifications.
     
     Args:
@@ -406,6 +416,7 @@ async def process_city_original(city: str, days_ahead: int = 14, events_count: i
         days_ahead: Number of days ahead to search for events
         events_count: Number of events to find and process
         config: Application configuration
+        progress_callback: Optional callback function for progress updates
         
     Returns:
         Processed results
@@ -413,11 +424,21 @@ async def process_city_original(city: str, days_ahead: int = 14, events_count: i
     if config is None:
         config = DoraConfig()
     
+    # Progress reporting helper
+    async def report_progress(step: str, details: str = ""):
+        if progress_callback:
+            await progress_callback(step, details)
+        logger.info(f"[PROGRESS] {step}: {details}")
+    
+    await report_progress("INITIALIZING", "Setting up OpenAI client and agents")
+    
     # Set up OpenAI client
-    agents.set_default_openai_key(config.openai_api_key)
+    set_default_openai_key(config.openai_api_key)
     
     # Create context
     context = DoraContext(city)
+    
+    await report_progress("CREATING_AGENTS", f"Setting up {events_count} event processing pipeline")
     
     # Create agents
     event_finder = create_event_finder_agent(config, events_count)
@@ -425,6 +446,8 @@ async def process_city_original(city: str, days_ahead: int = 14, events_count: i
     language_selector = create_language_selector_agent(config)
     text_writer = create_text_writer_agent(config)
     orchestrator = create_orchestrator_agent(config, events_count)
+    
+    await report_progress("BUILDING_TOOLS", "Creating agent tools and orchestrator")
     
     # Create event finder tool using agent.as_tool()
     event_finder_tool = event_finder.as_tool(
@@ -468,14 +491,19 @@ async def process_city_original(city: str, days_ahead: int = 14, events_count: i
         output_type=orchestrator.output_type,
     )
     
+    await report_progress("STARTING_SEARCH", f"Searching for {events_count} events in {city}")
+    
     # Run the orchestrator with tracing
-    prompt = f"Process events in {city} for the next {days_ahead} days."
+    today = datetime.now().strftime("%Y-%m-%d")
+    prompt = f"Process events in {city} for the next {days_ahead} days, starting from today ({today}). ONLY include events happening today or in the future."
     
     with trace(f"ProcessCity:{city}") as process_trace:
         process_trace.metadata = {"city": city, "days_ahead": str(days_ahead), "events_count": str(events_count)}
         
         logger.info(f"[TRACE] Starting orchestrator with prompt: {prompt}")
         runner_start_time = time.time()
+        
+        await report_progress("RUNNING_ORCHESTRATOR", "Executing event discovery and notification pipeline")
         
         result = await Runner.run(
             orchestrator_with_tools, 
@@ -486,10 +514,14 @@ async def process_city_original(city: str, days_ahead: int = 14, events_count: i
         runner_duration = time.time() - runner_start_time
         logger.info(f"[TRACE] Orchestrator completed in {runner_duration:.2f} seconds")
         
+        await report_progress("PROCESSING_RESULTS", f"Found {len(result.final_output.results) if result.final_output else 0} events, filtering and formatting")
+        
         process_trace.metadata.update({
             "duration_seconds": f"{runner_duration:.2f}",
             "events_found": str(len(result.final_output.results) if result.final_output else 0)
         })
+    
+    await report_progress("COMPLETED", f"Successfully processed {len(result.final_output.results) if result.final_output else 0} events")
     
     return result.final_output.results
 
@@ -731,7 +763,7 @@ async def main_async():
             sys.exit(1)
             
         # Initialize OpenAI agents SDK with API key
-        agents.set_default_openai_key(config.openai_api_key)
+        set_default_openai_key(config.openai_api_key)
         
         # Tracing is enabled by default in the agents SDK
         if os.getenv("ENABLE_TRACING", "true").lower() == "true":
@@ -764,8 +796,14 @@ async def main_async():
             print(f"No events found in {args.city}")
             return
         
-        # Format results for display
+        # Format results for display and filter out None values (past events)
         formatted_results = [format_notification_for_display(result) for result in results]
+        formatted_results = [result for result in formatted_results if result is not None]
+        
+        if not formatted_results:
+            logger.info(f"No valid future events found in {args.city}")
+            print(f"No valid future events found in {args.city}")
+            return
         
         if args.output == "json":
             print(json.dumps(formatted_results, indent=2))
