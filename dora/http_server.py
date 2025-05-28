@@ -205,26 +205,37 @@ class ChatCompletionHandler:
         return "\n".join(lines)
     
     def _format_events_as_json(self, events: List[EventNotification]) -> str:
-        """Format events as JSON."""
-        events_data = []
+        """Format events as JSON with full notification data."""
+        notifications_data = []
         for notification in events:
             event = notification.event
-            events_data.append({
-                "name": event.name,
-                "location": event.location,
-                "start_date": event.start_date,
-                "end_date": event.end_date,
-                "description": event.description,
-                "url": event.url,
+            notifications_data.append({
+                "event": {
+                    "name": event.name,
+                    "location": event.location,
+                    "start_date": event.start_date,
+                    "end_date": event.end_date,
+                    "description": event.description,
+                    "url": event.url
+                },
                 "classification": {
                     "size": notification.classification.size,
                     "importance": notification.classification.importance,
-                    "audiences": notification.classification.audiences
-                } if notification.classification else None
+                    "target_audiences": notification.classification.audiences
+                } if notification.classification else None,
+                "notifications": [
+                    {
+                        "text": notif.text,
+                        "language": notif.language,
+                        "context": {
+                            "group_id": notif.context.group_id if notif.context else "default"
+                        } if notif.context else None
+                    } for notif in (notification.notifications or [])
+                ]
             })
         
         import json
-        return json.dumps({"events": events_data}, indent=2)
+        return json.dumps({"notifications": notifications_data}, indent=2)
     
     async def process_request(self, request: ChatCompletionRequest) -> ChatCompletionResponse:
         """Process a chat completion request."""

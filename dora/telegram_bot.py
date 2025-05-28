@@ -2,15 +2,14 @@
 
 import asyncio
 import logging
-import os
-from typing import Optional
+import json
 from datetime import datetime
 
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 
 from dora.models.config import DoraConfig
-from dora.__main__ import process_city, format_notification_for_display
+from dora.http_client import DoraHTTPClient
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -355,15 +354,39 @@ async def handle_city(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         else:
             events_count = 10
         
-        # Process the city with progress updates
-        logger.info(f"Processing city: {city} for user: {update.effective_user.username}")
-        results = await process_city(
-            city=city, 
-            days_ahead=14, 
-            events_count=events_count, 
-            config=config,
-            progress_callback=progress_callback
+        # Create HTTP client
+        http_url = f"http://{config.http_host}:{config.http_port}"
+        api_key = config.http_api_keys[0] if config.http_api_keys else None
+        client = DoraHTTPClient(http_url, api_key)
+        
+        # Build the message for the HTTP API
+        message = f"{city} (events_count={events_count}, days_ahead=14)"
+        
+        # Process the city via HTTP API
+        logger.info(f"Processing city via HTTP: {city} for user: {update.effective_user.username}")
+        
+        # Update progress to show we're processing
+        await progress_callback("RUNNING_ORCHESTRATOR", "Processing through HTTP interface...")
+        
+        # Create a proper chat completion request with JSON response format
+        response = await client.chat_completion_with_json(
+            message=message,
+            temperature=0.0,
+            model="dora-events-v1"
         )
+        
+        # Extract the results from the response
+        if not response or 'choices' not in response or not response['choices']:
+            results = None
+        else:
+            content = response['choices'][0]['message']['content']
+            try:
+                # Parse the JSON response
+                data = json.loads(content)
+                results = data.get('notifications', [])
+            except json.JSONDecodeError:
+                logger.error("Failed to parse JSON response from HTTP server")
+                results = None
         
         # Delete the processing message
         try:
@@ -399,12 +422,9 @@ async def send_results(update: Update, city: str, results: list) -> None:
         user = update.effective_user
         mention = f"@{user.username}, " if user.username else ""
     
-    # Filter out past events first
-    valid_events = []
-    for result in results:
-        formatted = format_notification_for_display(result)
-        if formatted is not None:
-            valid_events.append(formatted)
+    # Results from HTTP API are already properly formatted
+    # Just filter out any that might be None
+    valid_events = [event for event in results if event is not None]
     
     if not valid_events:
         await update.message.reply_text(
@@ -421,10 +441,10 @@ async def send_results(update: Update, city: str, results: list) -> None:
     )
     
     # Send each event as a separate message
-    for event_count, formatted in enumerate(valid_events, 1):
-        event = formatted["event"]
-        classification = formatted["classification"]
-        notifications = formatted["notifications"]
+    for event_count, result in enumerate(valid_events, 1):
+        event = result["event"]
+        classification = result["classification"]
+        notifications = result["notifications"]
         
         # Format the message
         message = f"**{event_count}. {event['name']}**\n"
