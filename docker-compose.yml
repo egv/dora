@@ -1,6 +1,40 @@
 version: '3.8'
 
 services:
+  # HTTP Server
+  http-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: dora-http-server
+    env_file:
+      - .env
+    environment:
+      - MEMORY_CACHE_ENABLED=true
+      - MEMORY_CACHE_PATH=/app/cache/dora_memory.db
+      - MEMORY_CACHE_TTL_DAYS=7
+      - MEMORY_CACHE_MAX_SIZE_MB=100
+      - LOG_LEVEL=INFO
+      - ENABLE_TRACING=true
+      - HTTP_ENABLED=true
+      - HTTP_HOST=0.0.0.0
+      - HTTP_PORT=8000
+    volumes:
+      - ./cache:/app/cache
+      - ./logs:/app/logs
+    restart: unless-stopped
+    networks:
+      - dora-network
+    ports:
+      - "8000:8000"
+    command: ["uv", "run", "python", "-m", "dora.http_server"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
   # Main Telegram bot
   telegram-bot:
     build:
@@ -16,12 +50,17 @@ services:
       - MEMORY_CACHE_MAX_SIZE_MB=100
       - LOG_LEVEL=INFO
       - ENABLE_TRACING=true
+      - HTTP_HOST=http-server
+      - HTTP_PORT=8000
     volumes:
       - ./cache:/app/cache
       - ./logs:/app/logs
     restart: unless-stopped
     networks:
       - dora-network
+    depends_on:
+      http-server:
+        condition: service_healthy
     command: ["uv", "run", "python", "-m", "dora.telegram_bot"]
 
   # CLI interface for testing

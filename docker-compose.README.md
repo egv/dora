@@ -4,13 +4,21 @@ This Docker Compose configuration allows you to run all Dora components together
 
 ## Services
 
-### 1. Telegram Bot (`telegram-bot`)
-The main Telegram bot that users interact with.
+### 1. HTTP Server (`http-server`)
+The HTTP API server that provides OpenAI-compatible endpoints for processing city queries.
+- Runs on port 8000
+- Provides `/v1/chat/completions` endpoint
+- Health check endpoint at `/health`
 
-### 2. CLI Interface (`dora-cli`)
+### 2. Telegram Bot (`telegram-bot`)
+The main Telegram bot that users interact with.
+- Connects to the HTTP server for processing requests
+- Depends on the HTTP server being healthy
+
+### 3. CLI Interface (`dora-cli`)
 Command-line interface for testing and debugging.
 
-### 3. One-off Processing (`dora`)
+### 4. One-off Processing (`dora`)
 For running single city queries.
 
 ## Usage
@@ -24,21 +32,56 @@ OPENAI_API_KEY=your_openai_key
 TELEGRAM_API_KEY=your_telegram_bot_token
 ```
 
-### Running the Telegram Bot
+### Running the Services
 
-Start the Telegram bot:
+Start both HTTP server and Telegram bot:
+```bash
+docker-compose up -d
+```
+
+Start only the HTTP server:
+```bash
+docker-compose up -d http-server
+```
+
+Start only the Telegram bot (will also start HTTP server):
 ```bash
 docker-compose up -d telegram-bot
 ```
 
 View logs:
 ```bash
+# All services
+docker-compose logs -f
+
+# Specific service
 docker-compose logs -f telegram-bot
+docker-compose logs -f http-server
 ```
 
-Stop the bot:
+Stop all services:
 ```bash
 docker-compose down
+```
+
+### Testing the HTTP Server
+
+Test the HTTP server directly:
+```bash
+# Health check
+curl http://localhost:8000/health
+
+# List models
+curl http://localhost:8000/v1/models
+
+# Send a chat completion request
+curl -X POST http://localhost:8000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "dora-events-v1",
+    "messages": [{"role": "user", "content": "San Francisco"}],
+    "temperature": 0
+  }'
 ```
 
 ### Using the CLI
@@ -77,6 +120,10 @@ All services support these environment variables:
 - `MEMORY_CACHE_MAX_SIZE_MB`: Maximum cache size (default: 100)
 - `LOG_LEVEL`: Logging level (default: INFO)
 - `ENABLE_TRACING`: Enable OpenAI tracing (default: true)
+- `HTTP_ENABLED`: Enable HTTP server (default: true)
+- `HTTP_HOST`: HTTP server host (default: 0.0.0.0)
+- `HTTP_PORT`: HTTP server port (default: 8000)
+- `HTTP_API_KEYS`: Comma-separated API keys for HTTP authentication (optional)
 
 ## Building Images
 
