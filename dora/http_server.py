@@ -221,7 +221,7 @@ class ChatCompletionHandler:
                 "classification": {
                     "size": notification.classification.size,
                     "importance": notification.classification.importance,
-                    "target_audiences": notification.classification.audiences
+                    "target_audiences": notification.classification.target_audiences
                 } if notification.classification else None,
                 "notifications": [
                     {
