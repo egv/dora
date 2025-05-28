@@ -57,8 +57,7 @@ async def process_events_with_cache(
     # Get languages for the city
     language_result = await Runner.run(
         language_selector,
-        city,
-        input_schema={"type": "string", "description": "City name"}
+        city
     )
     languages = language_result.output.languages if language_result.output else ["en"]
     
@@ -92,11 +91,7 @@ async def process_events_with_cache(
         # Classify the event
         classification_result = await Runner.run(
             event_classifier,
-            event_dict,
-            input_schema={
-                "type": "object",
-                "description": "Event details for classification"
-            }
+            event_dict
         )
         classification = classification_result.output.classification
         
@@ -123,11 +118,7 @@ async def process_events_with_cache(
                 
                 notification_result = await Runner.run(
                     text_writer,
-                    notification_input,
-                    input_schema={
-                        "type": "object",
-                        "description": "Notification generation parameters"
-                    }
+                    notification_input
                 )
                 
                 if notification_result.output and notification_result.output.notifications:

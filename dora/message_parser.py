@@ -1,7 +1,7 @@
 """Message parser for extracting event search parameters from chat messages."""
 
 import re
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 from datetime import datetime, timedelta
 import logging
 
@@ -18,7 +18,8 @@ class ParsedQuery(BaseModel):
     days_ahead: int = Field(14, description="Number of days ahead to search")
     event_types: Optional[List[str]] = Field(None, description="Specific event types to search for")
     language: Optional[str] = Field(None, description="Preferred response language")
-    date_range: Optional[Tuple[datetime, datetime]] = Field(None, description="Specific date range if mentioned")
+    # Note: Removed date_range field as it causes JSON schema issues with OpenAI agents
+    # date_range can be computed from days_ahead if needed
 
 
 class MessageParser:
@@ -56,7 +57,7 @@ class MessageParser:
         return Agent(
             name="MessageParser",
             instructions=instructions,
-            model="gpt-3.5-turbo",
+            model="gpt-4o-mini",  # Use gpt-4o-mini which supports structured outputs
             model_settings=ModelSettings(temperature=0),
             output_type=ParsedQuery
         )

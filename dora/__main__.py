@@ -545,7 +545,7 @@ async def process_city(city: str, days_ahead: int = 14, events_count: int = 10, 
     cache = MemoryCache(config)
     
     # Set up OpenAI client
-    agents.set_default_openai_key(config.openai_api_key)
+    set_default_openai_key(config.openai_api_key)
     
     # Create agents
     event_finder = create_event_finder_agent(config, events_count)
@@ -567,8 +567,7 @@ async def process_city(city: str, days_ahead: int = 14, events_count: int = 10, 
         
         event_result = await Runner.run(
             event_finder,
-            city,
-            input_schema={"type": "string", "description": "City name"}
+            city
         )
         
         find_events_duration = time.time() - find_events_start
@@ -581,8 +580,7 @@ async def process_city(city: str, days_ahead: int = 14, events_count: int = 10, 
         
         language_result = await Runner.run(
             language_selector,
-            city,
-            input_schema={"type": "string", "description": "City name"}
+            city
         )
         
         languages = language_result.output.languages if language_result.output else ["en"]
@@ -625,11 +623,7 @@ async def process_city(city: str, days_ahead: int = 14, events_count: int = 10, 
             
             classification_result = await Runner.run(
                 event_classifier,
-                event_dict,
-                input_schema={
-                    "type": "object",
-                    "description": "Event details for classification"
-                }
+                event_dict
             )
             classification = classification_result.output.classification
             classify_duration = time.time() - classify_start
@@ -659,11 +653,7 @@ async def process_city(city: str, days_ahead: int = 14, events_count: int = 10, 
                     
                     notification_result = await Runner.run(
                         text_writer,
-                        notification_input,
-                        input_schema={
-                            "type": "object",
-                            "description": "Notification generation parameters"
-                        }
+                        notification_input
                     )
                     
                     if notification_result.output and notification_result.output.notifications:
