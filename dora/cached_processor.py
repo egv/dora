@@ -127,6 +127,8 @@ async def process_events_with_cache(
                         # Add language and group info to notification
                         notif_dict = notif.model_dump()
                         notif_dict["language"] = language
+                        if "context" not in notif_dict:
+                            notif_dict["context"] = {}
                         notif_dict["context"]["group_id"] = "general"
                         notifications.append(NotificationData(**notif_dict))
         
