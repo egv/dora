@@ -368,11 +368,12 @@ async def handle_city(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         # Update progress to show we're processing
         await progress_callback("RUNNING_ORCHESTRATOR", "Processing through HTTP interface...")
         
-        # Create HTTP request - don't use JSON schema, just get regular response
+        # Create HTTP request with JSON format
         response = await client.chat_completion(
             message=message,
             temperature=0.0,
-            model="dora-events-v1"
+            model="dora-events-v1",
+            response_format={"type": "json_object"}
         )
         
         # Extract the results from the response
@@ -404,7 +405,10 @@ async def handle_city(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         
     except Exception as e:
         logger.error(f"Error processing city {city}: {e}")
-        await processing_msg.delete()
+        try:
+            await processing_msg.delete()
+        except Exception:
+            pass  # Message might already be deleted or not exist
         await update.message.reply_text(
             f"❌ Sorry, I encountered an error while searching for events in {city}.\n"
             "Please try again later or try a different city."
@@ -467,7 +471,29 @@ async def send_results(update: Update, city: str, results: list) -> None:
         
         message += f"\n**Classification:**\n"
         message += f"🏷️ Size: {classification['size']} | Importance: {classification['importance']}\n"
-        message += f"👥 Audience: {', '.join(classification['target_audiences'])}\n"
+        
+        # Handle target_audiences - could be strings or dicts
+        audiences = classification.get('target_audiences', [])
+        if audiences:
+            audience_strs = []
+            for aud in audiences:
+                if isinstance(aud, dict):
+                    # Build audience string from dict
+                    parts = []
+                    if aud.get('gender'):
+                        parts.append(aud['gender'])
+                    if aud.get('age_range'):
+                        parts.append(aud['age_range'])
+                    if aud.get('income_level'):
+                        parts.append(aud['income_level'])
+                    if aud.get('other_attributes'):
+                        parts.extend(aud['other_attributes'])
+                    audience_strs.append(' '.join(parts) if parts else 'General')
+                else:
+                    audience_strs.append(str(aud))
+            message += f"👥 Audience: {', '.join(audience_strs)}\n"
+        else:
+            message += f"👥 Audience: General\n"
         
         if notifications:
             message += f"\n**Notifications:**\n"

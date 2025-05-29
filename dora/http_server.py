@@ -32,7 +32,7 @@ class Message(BaseModel):
 
 class ResponseFormat(BaseModel):
     """Response format specification."""
-    type: str = Field("text", description="Response format type (text or json_schema)")
+    type: str = Field("text", description="Response format type (text, json_object, or json_schema)")
     json_schema: Optional[Dict[str, Any]] = Field(None, description="JSON schema for structured output")
 
 
@@ -276,32 +276,12 @@ class ChatCompletionHandler:
             output_type=output_model
         )
         
-        # Prepare input data
+        # Prepare input data - convert all models to JSON-serializable format
         events_data = []
         for notification in events:
-            event = notification.event
-            events_data.append({
-                "event": {
-                    "name": event.name,
-                    "location": event.location,
-                    "start_date": event.start_date,
-                    "end_date": event.end_date,
-                    "description": event.description,
-                    "url": event.url
-                },
-                "classification": {
-                    "size": notification.classification.size,
-                    "importance": notification.classification.importance,
-                    "target_audiences": [aud.model_dump() if hasattr(aud, 'model_dump') else str(aud) for aud in notification.classification.target_audiences]
-                } if notification.classification else None,
-                "notifications": [
-                    {
-                        "text": notif.text,
-                        "language": notif.language,
-                        "audience": notif.audience.model_dump() if hasattr(notif.audience, 'model_dump') else str(notif.audience)
-                    } for notif in (notification.notifications or [])
-                ]
-            })
+            # Use model_dump with mode='json' to ensure all nested objects are serializable
+            notification_data = notification.model_dump(mode='json')
+            events_data.append(notification_data)
         
         # Run the agent
         result = await Runner.run(agent, json_module.dumps({"events": events_data}))
@@ -311,33 +291,13 @@ class ChatCompletionHandler:
     
     def _format_events_as_json(self, events: List[EventNotification]) -> str:
         """Format events as JSON with full notification data."""
+        # Convert all Pydantic models to dictionaries first
         notifications_data = []
+        
         for notification in events:
-            event = notification.event
-            notifications_data.append({
-                "event": {
-                    "name": event.name,
-                    "location": event.location,
-                    "start_date": event.start_date,
-                    "end_date": event.end_date,
-                    "description": event.description,
-                    "url": event.url
-                },
-                "classification": {
-                    "size": notification.classification.size,
-                    "importance": notification.classification.importance,
-                    "target_audiences": notification.classification.target_audiences
-                } if notification.classification else None,
-                "notifications": [
-                    {
-                        "text": notif.text,
-                        "language": notif.language,
-                        "context": {
-                            "group_id": getattr(notif, 'context', {}).get('group_id', 'general') if hasattr(notif, 'context') else {"group_id": "general"}
-                        }
-                    } for notif in (notification.notifications or [])
-                ]
-            })
+            # Use model_dump to convert the entire notification to a dictionary
+            notif_dict = notification.model_dump(mode='json')
+            notifications_data.append(notif_dict)
         
         import json
         return json.dumps({"notifications": notifications_data}, indent=2)
@@ -371,14 +331,22 @@ class ChatCompletionHandler:
             )
             
             # Format the response based on response_format
-            if request.response_format and request.response_format.type == "json_schema":
-                schema = request.response_format.json_schema.get("schema", {})
-                if schema and "properties" in schema:
-                    # Use agent-based formatting with a valid schema
-                    response_content = await self._format_with_agent(results, schema)
-                else:
-                    # Invalid or empty schema, return default JSON format
+            if request.response_format:
+                logger.info(f"Response format type: {request.response_format.type}")
+                if request.response_format.type == "json_schema":
+                    schema = request.response_format.json_schema.get("schema", {})
+                    if schema and "properties" in schema:
+                        # Use agent-based formatting with a valid schema
+                        response_content = await self._format_with_agent(results, schema)
+                    else:
+                        # Invalid or empty schema, return default JSON format
+                        response_content = self._format_events_as_json(results)
+                elif request.response_format.type == "json_object":
+                    # Return default JSON format for json_object type
+                    logger.info("Using JSON format for json_object type")
                     response_content = self._format_events_as_json(results)
+                else:
+                    response_content = self._format_events_as_text(results)
             else:
                 response_content = self._format_events_as_text(results)
             

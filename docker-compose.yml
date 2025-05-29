@@ -27,7 +27,7 @@ services:
       - "8000:8000"
     command: ["uv", "run", "python", "run_http_server.py"]
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test: ["CMD", "uv", "run", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health').read()"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -61,57 +61,7 @@ services:
         condition: service_healthy
     command: ["uv", "run", "python", "run_bot.py"]
 
-  # CLI interface for testing
-  dora-cli:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: dora-cli
-    env_file:
-      - .env
-    environment:
-      - MEMORY_CACHE_ENABLED=true
-      - MEMORY_CACHE_PATH=/app/cache/dora_memory.db
-      - LOG_LEVEL=INFO
-      - ENABLE_TRACING=true
-    volumes:
-      - ./cache:/app/cache
-      - ./logs:/app/logs
-    networks:
-      - dora-network
-    profiles:
-      - cli
-    stdin_open: true
-    tty: true
-    command: ["uv", "run", "python", "-m", "dora", "--city", "San Francisco"]
-
-  # One-off city processing
-  dora:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: dora-oneoff
-    env_file:
-      - .env
-    environment:
-      - MEMORY_CACHE_ENABLED=true
-      - MEMORY_CACHE_PATH=/app/cache/dora_memory.db
-      - LOG_LEVEL=INFO
-    volumes:
-      - ./cache:/app/cache
-      - ./logs:/app/logs
-    networks:
-      - dora-network
-    profiles:
-      - oneoff
-    command: ["uv", "run", "python", "-m", "dora", "--city", "New York", "--output", "pretty"]
 
 networks:
   dora-network:
     driver: bridge
-
-volumes:
-  cache:
-    driver: local
-  logs:
-    driver: local
