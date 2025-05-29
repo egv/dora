@@ -75,8 +75,9 @@ run_memory_server.sh
 .github/
 
 # Documentation
-README.md
 docker-compose.README.md
+IMPROVEMENT_PLAN.md
+PROGRESS_REPORTING.md
 
 # Keep these
 !dora/

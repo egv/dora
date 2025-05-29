@@ -545,7 +545,7 @@ async def process_city(city: str, days_ahead: int = 14, events_count: int = 10, 
     cache = MemoryCache(config)
     
     # Set up OpenAI client
-    agents.set_default_openai_key(config.openai_api_key)
+    set_default_openai_key(config.openai_api_key)
     
     # Create agents
     event_finder = create_event_finder_agent(config, events_count)
@@ -567,12 +567,11 @@ async def process_city(city: str, days_ahead: int = 14, events_count: int = 10, 
         
         event_result = await Runner.run(
             event_finder,
-            city,
-            input_schema={"type": "string", "description": "City name"}
+            city
         )
         
         find_events_duration = time.time() - find_events_start
-        events = event_result.output.events if event_result.output else []
+        events = event_result.final_output.events if event_result.final_output else []
         logger.info(f"Found {len(events)} events in {find_events_duration:.2f}s")
         
         # Step 2: Get languages for the city
@@ -581,11 +580,10 @@ async def process_city(city: str, days_ahead: int = 14, events_count: int = 10, 
         
         language_result = await Runner.run(
             language_selector,
-            city,
-            input_schema={"type": "string", "description": "City name"}
+            city
         )
         
-        languages = language_result.output.languages if language_result.output else ["en"]
+        languages = language_result.final_output.languages if language_result.final_output else ["en"]
         lang_duration = time.time() - lang_start
         logger.info(f"Found languages {languages} in {lang_duration:.2f}s")
         
@@ -625,13 +623,9 @@ async def process_city(city: str, days_ahead: int = 14, events_count: int = 10, 
             
             classification_result = await Runner.run(
                 event_classifier,
-                event_dict,
-                input_schema={
-                    "type": "object",
-                    "description": "Event details for classification"
-                }
+                json.dumps(event_dict)
             )
-            classification = classification_result.output.classification
+            classification = classification_result.final_output.classification
             classify_duration = time.time() - classify_start
             logger.info(f"Classified event in {classify_duration:.2f}s")
             
@@ -644,7 +638,7 @@ async def process_city(city: str, days_ahead: int = 14, events_count: int = 10, 
                     notification_input = {
                         "event": event_dict,
                         "audience": {
-                            "demographic": audience,
+                            "demographic": audience.model_dump() if hasattr(audience, 'model_dump') else audience,
                             "interests": [],
                             "tech_savvy": True,
                             "local": True
@@ -659,18 +653,16 @@ async def process_city(city: str, days_ahead: int = 14, events_count: int = 10, 
                     
                     notification_result = await Runner.run(
                         text_writer,
-                        notification_input,
-                        input_schema={
-                            "type": "object",
-                            "description": "Notification generation parameters"
-                        }
+                        json.dumps(notification_input)
                     )
                     
-                    if notification_result.output and notification_result.output.notifications:
-                        for notif in notification_result.output.notifications:
+                    if notification_result.final_output and notification_result.final_output.notifications:
+                        for notif in notification_result.final_output.notifications:
                             # Add language and group info to notification
                             notif_dict = notif.model_dump()
                             notif_dict["language"] = language
+                            if "context" not in notif_dict:
+                                notif_dict["context"] = {}
                             notif_dict["context"]["group_id"] = "general"
                             notifications.append(NotificationData(**notif_dict))
             
