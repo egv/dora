@@ -37,3 +37,8 @@ wheels/
 .env.development.local
 .env.test.local
 .env.production.local
+
+# Cache and logs
+cache/
+logs/
+*.db
