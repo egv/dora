@@ -1,7 +1,7 @@
 """Configuration models for the application."""
 
 import os
-from typing import Dict, Optional
+from typing import Dict, Optional, List
 from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings
 
@@ -35,6 +35,13 @@ class DoraConfig(BaseSettings):
     memory_cache_path: str = Field(default="./cache/dora_memory.db", env="MEMORY_CACHE_PATH")
     memory_cache_ttl_days: int = Field(default=7, env="MEMORY_CACHE_TTL_DAYS")
     memory_cache_max_size_mb: int = Field(default=100, env="MEMORY_CACHE_MAX_SIZE_MB")
+    
+    # HTTP Server configuration
+    http_enabled: bool = Field(default=True, env="HTTP_ENABLED")
+    http_host: str = Field(default="0.0.0.0", env="HTTP_HOST")
+    http_port: int = Field(default=8000, env="HTTP_PORT")
+    http_api_keys: List[str] = Field(default_factory=list, env="HTTP_API_KEYS", description="Comma-separated list of API keys")
+    http_rate_limit: int = Field(default=100, env="HTTP_RATE_LIMIT", description="Requests per minute")
     
     # Agent Configurations
     orchestrator_config: AgentConfig = Field(

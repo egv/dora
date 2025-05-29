@@ -1,6 +1,38 @@
-version: '3.8'
-
 services:
+  # HTTP Server
+  http-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: dora-http-server
+    env_file:
+      - .env
+    environment:
+      - MEMORY_CACHE_ENABLED=true
+      - MEMORY_CACHE_PATH=/app/cache/dora_memory.db
+      - MEMORY_CACHE_TTL_DAYS=7
+      - MEMORY_CACHE_MAX_SIZE_MB=100
+      - LOG_LEVEL=INFO
+      - ENABLE_TRACING=true
+      - HTTP_ENABLED=true
+      - HTTP_HOST=0.0.0.0
+      - HTTP_PORT=8000
+    volumes:
+      - ./cache:/app/cache
+      - ./logs:/app/logs
+    restart: unless-stopped
+    networks:
+      - dora-network
+    ports:
+      - "8000:8000"
+    command: ["uv", "run", "python", "run_http_server.py"]
+    healthcheck:
+      test: ["CMD", "uv", "run", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health').read()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
   # Main Telegram bot
   telegram-bot:
     build:
@@ -16,65 +48,20 @@ services:
       - MEMORY_CACHE_MAX_SIZE_MB=100
       - LOG_LEVEL=INFO
       - ENABLE_TRACING=true
+      - HTTP_HOST=http-server
+      - HTTP_PORT=8000
     volumes:
       - ./cache:/app/cache
       - ./logs:/app/logs
     restart: unless-stopped
     networks:
       - dora-network
-    command: ["uv", "run", "python", "-m", "dora.telegram_bot"]
+    depends_on:
+      http-server:
+        condition: service_healthy
+    command: ["uv", "run", "python", "run_bot.py"]
 
-  # CLI interface for testing
-  dora-cli:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: dora-cli
-    env_file:
-      - .env
-    environment:
-      - MEMORY_CACHE_ENABLED=true
-      - MEMORY_CACHE_PATH=/app/cache/dora_memory.db
-      - LOG_LEVEL=INFO
-      - ENABLE_TRACING=true
-    volumes:
-      - ./cache:/app/cache
-      - ./logs:/app/logs
-    networks:
-      - dora-network
-    profiles:
-      - cli
-    stdin_open: true
-    tty: true
-    command: ["uv", "run", "python", "-m", "dora", "--city", "San Francisco"]
-
-  # One-off city processing
-  dora:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: dora-oneoff
-    env_file:
-      - .env
-    environment:
-      - MEMORY_CACHE_ENABLED=true
-      - MEMORY_CACHE_PATH=/app/cache/dora_memory.db
-      - LOG_LEVEL=INFO
-    volumes:
-      - ./cache:/app/cache
-      - ./logs:/app/logs
-    networks:
-      - dora-network
-    profiles:
-      - oneoff
-    command: ["uv", "run", "python", "-m", "dora", "--city", "New York", "--output", "pretty"]
 
 networks:
   dora-network:
     driver: bridge
-
-volumes:
-  cache:
-    driver: local
-  logs:
-    driver: local

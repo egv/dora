@@ -1,6 +1,7 @@
 """Cached event processor for Dora."""
 
 import asyncio
+import json
 import time
 import logging
 from typing import Dict, List, Optional, Any
@@ -57,10 +58,9 @@ async def process_events_with_cache(
     # Get languages for the city
     language_result = await Runner.run(
         language_selector,
-        city,
-        input_schema={"type": "string", "description": "City name"}
+        city
     )
-    languages = language_result.output.languages if language_result.output else ["en"]
+    languages = language_result.final_output.languages if language_result.final_output else ["en"]
     
     results = []
     
@@ -92,13 +92,9 @@ async def process_events_with_cache(
         # Classify the event
         classification_result = await Runner.run(
             event_classifier,
-            event_dict,
-            input_schema={
-                "type": "object",
-                "description": "Event details for classification"
-            }
+            json.dumps(event_dict)
         )
-        classification = classification_result.output.classification
+        classification = classification_result.final_output.classification
         
         # Generate notifications for each language and audience
         notifications = []
@@ -108,7 +104,7 @@ async def process_events_with_cache(
                 notification_input = {
                     "event": event_dict,
                     "audience": {
-                        "demographic": audience,
+                        "demographic": audience.model_dump() if hasattr(audience, 'model_dump') else audience,
                         "interests": [],
                         "tech_savvy": True,
                         "local": True
@@ -123,18 +119,16 @@ async def process_events_with_cache(
                 
                 notification_result = await Runner.run(
                     text_writer,
-                    notification_input,
-                    input_schema={
-                        "type": "object",
-                        "description": "Notification generation parameters"
-                    }
+                    json.dumps(notification_input)
                 )
                 
-                if notification_result.output and notification_result.output.notifications:
-                    for notif in notification_result.output.notifications:
+                if notification_result.final_output and notification_result.final_output.notifications:
+                    for notif in notification_result.final_output.notifications:
                         # Add language and group info to notification
                         notif_dict = notif.model_dump()
                         notif_dict["language"] = language
+                        if "context" not in notif_dict:
+                            notif_dict["context"] = {}
                         notif_dict["context"]["group_id"] = "general"
                         notifications.append(NotificationData(**notif_dict))
         

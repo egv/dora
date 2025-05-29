@@ -1,16 +1,9 @@
-FROM python:3.11-slim
+# Use uv's official image based on Python 3.11
+FROM ghcr.io/astral-sh/uv:python3.11-bookworm-slim
 
 WORKDIR /app
 
-# Install system dependencies
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-    gcc \
-    python3-dev \
-    && rm -rf /var/lib/apt/lists/*
-
-# Install UV
-RUN pip install --no-cache-dir uv
+# No additional system dependencies needed - the base image has everything we need
 
 # Copy project files
 COPY pyproject.toml uv.lock README.md ./
@@ -19,20 +12,15 @@ COPY pyproject.toml uv.lock README.md ./
 RUN mkdir -p /app/cache /app/logs
 
 # Install Python dependencies using UV
-RUN uv sync --frozen
+RUN uv sync --frozen --no-cache
 
 # Copy application code
 COPY dora ./dora
+COPY run_bot.py run_http_server.py ./
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
-
-# Create a non-root user to run the application
-RUN useradd -m dora && \
-    chown -R dora:dora /app
-
-USER dora
 
 # Default command (can be overridden in docker-compose)
 CMD ["uv", "run", "python", "-m", "dora", "--help"]
