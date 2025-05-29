@@ -42,3 +42,6 @@ wheels/
 cache/
 logs/
 *.db
+
+# Traefik certificates and data
+traefik-data/

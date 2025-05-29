@@ -1,4 +1,45 @@
 services:
+  # Traefik reverse proxy with Let's Encrypt
+  traefik:
+    image: traefik:v3.0
+    container_name: dora-traefik
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "8080:8080"  # Traefik dashboard
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./traefik-data:/data
+    command:
+      - --api.dashboard=true
+      - --api.insecure=true
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --entrypoints.web.address=:80
+      - --entrypoints.websecure.address=:443
+      - --certificatesresolvers.letsencrypt.acme.tlschallenge=true
+      - --certificatesresolvers.letsencrypt.acme.email=g.evstratov@gmail.com
+      - --certificatesresolvers.letsencrypt.acme.storage=/data/acme.json
+      - --certificatesresolvers.letsencrypt.acme.httpchallenge=true
+      - --certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web
+      - --global.checkNewVersion=false
+      - --global.sendAnonymousUsage=false
+    networks:
+      - dora-network
+    labels:
+      - "traefik.enable=true"
+      # Dashboard
+      - "traefik.http.routers.traefik.rule=Host(`al-vizier.haet.ru`) && (PathPrefix(`/api`) || PathPrefix(`/dashboard`))"
+      - "traefik.http.routers.traefik.tls=true"
+      - "traefik.http.routers.traefik.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.traefik.service=api@internal"
+      # HTTP to HTTPS redirect
+      - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
+      - "traefik.http.routers.redirect-https.rule=hostregexp(`{host:.+}`)"
+      - "traefik.http.routers.redirect-https.entrypoints=web"
+      - "traefik.http.routers.redirect-https.middlewares=redirect-to-https"
+
   # HTTP Server
   http-server:
     build:
@@ -23,8 +64,8 @@ services:
     restart: unless-stopped
     networks:
       - dora-network
-    ports:
-      - "8000:8000"
+    expose:
+      - "8000"
     command: ["uv", "run", "python", "run_http_server.py"]
     healthcheck:
       test: ["CMD", "uv", "run", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health').read()"]
@@ -32,6 +73,13 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.dora-api.rule=Host(`al-vizier.haet.ru`)"
+      - "traefik.http.routers.dora-api.tls=true"
+      - "traefik.http.routers.dora-api.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.dora-api.entrypoints=websecure"
+      - "traefik.http.services.dora-api.loadbalancer.server.port=8000"
 
   # Main Telegram bot
   telegram-bot:
