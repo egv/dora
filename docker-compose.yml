@@ -80,6 +80,14 @@ services:
       - "traefik.http.routers.dora-api.tls.certresolver=letsencrypt"
       - "traefik.http.routers.dora-api.entrypoints=websecure"
       - "traefik.http.services.dora-api.loadbalancer.server.port=8000"
+      # Basic auth middleware for /v1/chat/completions endpoint
+      - "traefik.http.middlewares.dora-auth.basicauth.users=admin:$$2y$$10$$8K1p3kbJGmnCBBMJTlscUuezPCZJkp4I5JNGfJeRPSjhRu6XfLkhy"
+      - "traefik.http.routers.dora-api-chat.rule=Host(`al-vizier.haet.ru`) && PathPrefix(`/v1/chat/completions`)"
+      - "traefik.http.routers.dora-api-chat.tls=true"
+      - "traefik.http.routers.dora-api-chat.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.dora-api-chat.entrypoints=websecure"
+      - "traefik.http.routers.dora-api-chat.middlewares=dora-auth"
+      - "traefik.http.routers.dora-api-chat.service=dora-api"
 
   # Main Telegram bot
   telegram-bot:
