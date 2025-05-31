@@ -81,7 +81,7 @@ services:
       - "traefik.http.routers.dora-api.entrypoints=websecure"
       - "traefik.http.services.dora-api.loadbalancer.server.port=8000"
       # Basic auth middleware for /v1/chat/completions endpoint
-      - "traefik.http.middlewares.dora-auth.basicauth.users=admin:$$2y$$10$$8K1p3kbJGmnCBBMJTlscUuezPCZJkp4I5JNGfJeRPSjhRu6XfLkhy"
+      - "traefik.http.middlewares.dora-auth.basicauth.users=admin:$$2b$$12$$5riNOzrVSUhIo/SvAaJSM.8gtkgbEJzfKoe3K.0L3dLNKiNuT4P42"
       - "traefik.http.routers.dora-api-chat.rule=Host(`al-vizier.haet.ru`) && PathPrefix(`/v1/chat/completions`)"
       - "traefik.http.routers.dora-api-chat.tls=true"
       - "traefik.http.routers.dora-api-chat.tls.certresolver=letsencrypt"
