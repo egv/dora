@@ -42,7 +42,7 @@ def main():
     
     # Run the FastAPI app with uvicorn
     uvicorn.run(
-        "dora.http_server:app",
+        "dora.perplexity_proxy_server:app",
         host=config.http_host,
         port=config.http_port,
         reload=os.getenv("DEBUG", "false").lower() == "true",

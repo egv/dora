@@ -67,12 +67,6 @@ services:
     expose:
       - "8000"
     command: ["uv", "run", "python", "run_http_server.py"]
-    healthcheck:
-      test: ["CMD", "uv", "run", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health').read()"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.dora-api.rule=Host(`al-vizier.haet.ru`)"
@@ -113,8 +107,7 @@ services:
     networks:
       - dora-network
     depends_on:
-      http-server:
-        condition: service_healthy
+      - http-server
     command: ["uv", "run", "python", "run_bot.py"]
 
 

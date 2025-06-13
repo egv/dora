@@ -1,13 +1,17 @@
-"""OpenAI-compatible HTTP server for Dora."""
+"""Perplexity proxy server - drop-in replacement for http_server.py with Perplexity proxy functionality."""
 
 import time
 import uuid
 from typing import Dict, List, Optional, Union, Any, Type
 from datetime import datetime
+import httpx
+import os
+from dotenv import load_dotenv
 
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException, Header
+from fastapi import FastAPI, HTTPException, Header, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field, create_model, Field as PydanticField
 import logging
 import json as json_module
@@ -17,6 +21,9 @@ from dora.models.config import DoraConfig
 from dora.models.event import EventNotification
 from dora.message_parser import MessageParser, ParsedQuery
 from dora.__main__ import process_city
+
+# Load environment variables
+load_dotenv()
 
 logger = logging.getLogger(__name__)
 
@@ -93,8 +100,8 @@ class ErrorResponse(BaseModel):
 
 # Create FastAPI app (without lifespan for now)
 app = FastAPI(
-    title="Dora OpenAI-Compatible API",
-    description="Event discovery service with OpenAI-compatible interface",
+    title="Perplexity Proxy Server",
+    description="OpenAI-compatible proxy server that forwards all requests to Perplexity API",
     version="1.0.0",
 )
 
@@ -127,15 +134,104 @@ def create_error_response(message: str, error_type: str = "invalid_request_error
     )
 
 
+# Perplexity proxy configuration
+PERPLEXITY_API_KEY = os.getenv("PERPLEXITY_API_KEY")
+PERPLEXITY_API_URL = "https://api.perplexity.ai/chat/completions"
+
+
+async def proxy_to_perplexity(request_body: Dict[str, Any], headers: Dict[str, str]) -> JSONResponse:
+    """Proxy request to Perplexity API."""
+    if not PERPLEXITY_API_KEY:
+        raise HTTPException(
+            status_code=500,
+            detail="Perplexity API key not configured"
+        )
+    
+    # Prepare headers for Perplexity
+    perplexity_headers = {
+        "Authorization": f"Bearer {PERPLEXITY_API_KEY}",
+        "Content-Type": "application/json"
+    }
+    
+    # Copy over any additional headers that might be useful
+    for header, value in headers.items():
+        if header.lower() in ["accept", "accept-encoding", "user-agent"]:
+            perplexity_headers[header] = value
+    
+    async with httpx.AsyncClient() as client:
+        try:
+            # Forward the request to Perplexity
+            response = await client.post(
+                PERPLEXITY_API_URL,
+                json=request_body,
+                headers=perplexity_headers,
+                timeout=60.0  # 60 second timeout
+            )
+            
+            # Return the response from Perplexity
+            return JSONResponse(
+                content=response.json(),
+                status_code=response.status_code,
+                headers={
+                    "Content-Type": "application/json",
+                    "X-Proxied-From": "perplexity"
+                }
+            )
+            
+        except httpx.TimeoutException:
+            raise HTTPException(
+                status_code=504,
+                detail="Request to Perplexity API timed out"
+            )
+        except httpx.RequestError as e:
+            logger.error(f"Error proxying to Perplexity: {e}")
+            raise HTTPException(
+                status_code=502,
+                detail=f"Error communicating with Perplexity API: {str(e)}"
+            )
+        except Exception as e:
+            logger.error(f"Unexpected error in Perplexity proxy: {e}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Internal server error: {str(e)}"
+            )
+
+
+@app.post("/perplexity/chat/completions")
+async def perplexity_chat_completions(request: Request):
+    """Proxy endpoint for Perplexity chat completions."""
+    try:
+        # Get request body
+        request_body = await request.json()
+        
+        # Get headers
+        headers = dict(request.headers)
+        
+        # Proxy to Perplexity
+        return await proxy_to_perplexity(request_body, headers)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in Perplexity proxy endpoint: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Internal server error: {str(e)}"
+        )
+
+
+# ================ ORIGINAL HTTP SERVER CODE BELOW ================
+
 @app.get("/")
 async def root():
     """Root endpoint."""
     return {
-        "message": "Dora OpenAI-Compatible API",
+        "message": "Perplexity Proxy Server",
         "version": "1.0.0",
         "endpoints": {
-            "chat_completions": "/v1/chat/completions",
-            "models": "/v1/models"
+            "chat_completions": "/v1/chat/completions (proxies to Perplexity)",
+            "models": "/v1/models",
+            "perplexity_proxy": "/perplexity/chat/completions"
         }
     }
 
@@ -148,24 +244,42 @@ async def health():
 
 @app.get("/v1/models")
 async def list_models():
-    """List available models."""
+    """List available models (Perplexity models)."""
     models = [
         {
-            "id": "dora-events-v1",
+            "id": "llama-3.1-sonar-small-128k-online",
             "object": "model",
             "created": 1700000000,
-            "owned_by": "dora",
+            "owned_by": "perplexity",
             "permission": [],
-            "root": "dora-events-v1",
+            "root": "llama-3.1-sonar-small-128k-online",
             "parent": None,
         },
         {
-            "id": "dora-events-fast",
+            "id": "llama-3.1-sonar-large-128k-online",
             "object": "model",
             "created": 1700000000,
-            "owned_by": "dora",
+            "owned_by": "perplexity",
             "permission": [],
-            "root": "dora-events-fast",
+            "root": "llama-3.1-sonar-large-128k-online",
+            "parent": None,
+        },
+        {
+            "id": "llama-3.1-sonar-small-128k-chat",
+            "object": "model",
+            "created": 1700000000,
+            "owned_by": "perplexity",
+            "permission": [],
+            "root": "llama-3.1-sonar-small-128k-chat",
+            "parent": None,
+        },
+        {
+            "id": "llama-3.1-sonar-large-128k-chat",
+            "object": "model",
+            "created": 1700000000,
+            "owned_by": "perplexity",
+            "permission": [],
+            "root": "llama-3.1-sonar-large-128k-chat",
             "parent": None,
         }
     ]
@@ -404,44 +518,28 @@ async def lifespan(app_instance: FastAPI):
 app.router.lifespan_context = lifespan
 
 
-
-
 @app.post("/v1/chat/completions", response_model=ChatCompletionResponse)
 async def create_chat_completion(
     request: ChatCompletionRequest,
     authorization: Optional[str] = Header(None)
 ) -> ChatCompletionResponse:
-    """Create a chat completion."""
+    """Create a chat completion - proxies all requests to Perplexity."""
     # Log the incoming request
-    logger.info(f"Received chat completion request - Model: {request.model}")
+    logger.info(f"Received chat completion request - Original Model: {request.model}")
     for i, msg in enumerate(request.messages):
         logger.info(f"Message {i+1} ({msg.role}): {msg.content}")
     
-    # Check if streaming is requested (not supported yet)
-    if request.stream:
-        raise HTTPException(
-            status_code=400,
-            detail="Streaming is not supported yet"
-        )
+    # Convert request to dict for proxying
+    request_dict = request.model_dump()
     
-    # Validate model
-    valid_models = ["dora-events-v1", "dora-events-fast", "gpt-4", "gpt-3.5-turbo"]
-    if request.model not in valid_models:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Model {request.model} not found. Available models: {', '.join(valid_models)}"
-        )
+    # Force all requests to use sonar model
+    request_dict["model"] = "sonar"
+    logger.info(f"Substituted model to: sonar")
     
-    # Process the request
-    if completion_handler is None:
-        raise HTTPException(status_code=500, detail="Service not initialized")
-    
-    try:
-        response = await completion_handler.process_request(request)
-        return response
-    except Exception as e:
-        logger.error(f"Error processing request: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    # Proxy ALL requests to Perplexity
+    headers = {"authorization": authorization} if authorization else {}
+    response = await proxy_to_perplexity(request_dict, headers)
+    return response
 
 
 @app.exception_handler(HTTPException)
