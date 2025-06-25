@@ -197,27 +197,6 @@ async def proxy_to_perplexity(request_body: Dict[str, Any], headers: Dict[str, s
             )
 
 
-@app.post("/perplexity/chat/completions")
-async def perplexity_chat_completions(request: Request):
-    """Proxy endpoint for Perplexity chat completions."""
-    try:
-        # Get request body
-        request_body = await request.json()
-        
-        # Get headers
-        headers = dict(request.headers)
-        
-        # Proxy to Perplexity
-        return await proxy_to_perplexity(request_body, headers)
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error in Perplexity proxy endpoint: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Internal server error: {str(e)}"
-        )
 
 
 # ================ ORIGINAL HTTP SERVER CODE BELOW ================
@@ -230,8 +209,7 @@ async def root():
         "version": "1.0.0",
         "endpoints": {
             "chat_completions": "/v1/chat/completions (proxies to Perplexity)",
-            "models": "/v1/models",
-            "perplexity_proxy": "/perplexity/chat/completions"
+            "models": "/v1/models"
         }
     }
 

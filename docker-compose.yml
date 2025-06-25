@@ -1,7 +1,7 @@
 services:
   # Traefik reverse proxy with Let's Encrypt
   traefik:
-    image: traefik:v3.0
+    image: docker.io/traefik:v3.0
     container_name: dora-traefik
     restart: unless-stopped
     ports:
@@ -9,7 +9,7 @@ services:
       - "443:443"
       - "8080:8080"  # Traefik dashboard
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /run/user/1000/podman/podman.sock:/var/run/docker.sock:ro
       - ./traefik-data:/data
     command:
       - --api.dashboard=true
@@ -29,11 +29,16 @@ services:
       - dora-network
     labels:
       - "traefik.enable=true"
-      # Dashboard
-      - "traefik.http.routers.traefik.rule=Host(`al-vizier.haet.ru`) && (PathPrefix(`/api`) || PathPrefix(`/dashboard`))"
-      - "traefik.http.routers.traefik.tls=true"
-      - "traefik.http.routers.traefik.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.traefik.service=api@internal"
+      # Dashboard for prod
+      - "traefik.http.routers.traefik-prod.rule=Host(`dora.bezalel.tech`) && (PathPrefix(`/api`) || PathPrefix(`/dashboard`))"
+      - "traefik.http.routers.traefik-prod.tls=true"
+      - "traefik.http.routers.traefik-prod.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.traefik-prod.service=api@internal"
+      # Dashboard for dev
+      - "traefik.http.routers.traefik-dev.rule=Host(`dev.dora.bezalel.tech`) && (PathPrefix(`/api`) || PathPrefix(`/dashboard`))"
+      - "traefik.http.routers.traefik-dev.tls=true"
+      - "traefik.http.routers.traefik-dev.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.traefik-dev.service=api@internal"
       # HTTP to HTTPS redirect
       - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
       - "traefik.http.routers.redirect-https.rule=hostregexp(`{host:.+}`)"
@@ -69,14 +74,14 @@ services:
     command: ["uv", "run", "python", "run_http_server.py"]
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.dora-api.rule=Host(`al-vizier.haet.ru`)"
+      - "traefik.http.routers.dora-api.rule=Host(`dora.bezalel.tech`)"
       - "traefik.http.routers.dora-api.tls=true"
       - "traefik.http.routers.dora-api.tls.certresolver=letsencrypt"
       - "traefik.http.routers.dora-api.entrypoints=websecure"
       - "traefik.http.services.dora-api.loadbalancer.server.port=8000"
       # Basic auth middleware for /v1/chat/completions endpoint
       - "traefik.http.middlewares.dora-auth.basicauth.users=admin:$$2b$$12$$5riNOzrVSUhIo/SvAaJSM.8gtkgbEJzfKoe3K.0L3dLNKiNuT4P42"
-      - "traefik.http.routers.dora-api-chat.rule=Host(`al-vizier.haet.ru`) && PathPrefix(`/v1/chat/completions`)"
+      - "traefik.http.routers.dora-api-chat.rule=Host(`dora.bezalel.tech`) && PathPrefix(`/v1/chat/completions`)"
       - "traefik.http.routers.dora-api-chat.tls=true"
       - "traefik.http.routers.dora-api-chat.tls.certresolver=letsencrypt"
       - "traefik.http.routers.dora-api-chat.entrypoints=websecure"
@@ -108,6 +113,76 @@ services:
       - dora-network
     depends_on:
       - http-server
+    command: ["uv", "run", "python", "run_bot.py"]
+
+  # HTTP Server for development
+  http-server-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: dora-http-server-dev
+    env_file:
+      - .env
+    environment:
+      - MEMORY_CACHE_ENABLED=true
+      - MEMORY_CACHE_PATH=/app/cache/dora_memory_dev.db
+      - MEMORY_CACHE_TTL_DAYS=7
+      - MEMORY_CACHE_MAX_SIZE_MB=100
+      - LOG_LEVEL=DEBUG  # More verbose logging for dev
+      - ENABLE_TRACING=true
+      - HTTP_ENABLED=true
+      - HTTP_HOST=0.0.0.0
+      - HTTP_PORT=8000
+    volumes:
+      - ./cache:/app/cache
+      - ./logs:/app/logs
+    restart: unless-stopped
+    networks:
+      - dora-network
+    expose:
+      - "8000"
+    command: ["uv", "run", "python", "run_http_server.py"]
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.dora-api-dev.rule=Host(`dev.dora.bezalel.tech`)"
+      - "traefik.http.routers.dora-api-dev.tls=true"
+      - "traefik.http.routers.dora-api-dev.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.dora-api-dev.entrypoints=websecure"
+      - "traefik.http.services.dora-api-dev.loadbalancer.server.port=8000"
+      # Basic auth middleware for /v1/chat/completions endpoint
+      - "traefik.http.middlewares.dora-auth-dev.basicauth.users=admin:$$2b$$12$$5riNOzrVSUhIo/SvAaJSM.8gtkgbEJzfKoe3K.0L3dLNKiNuT4P42"
+      - "traefik.http.routers.dora-api-chat-dev.rule=Host(`dev.dora.bezalel.tech`) && PathPrefix(`/v1/chat/completions`)"
+      - "traefik.http.routers.dora-api-chat-dev.tls=true"
+      - "traefik.http.routers.dora-api-chat-dev.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.dora-api-chat-dev.entrypoints=websecure"
+      - "traefik.http.routers.dora-api-chat-dev.middlewares=dora-auth-dev"
+      - "traefik.http.routers.dora-api-chat-dev.service=dora-api-dev"
+
+  # Telegram bot for development
+  telegram-bot-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: dora-telegram-bot-dev
+    env_file:
+      - .env
+    environment:
+      - MEMORY_CACHE_ENABLED=true
+      - MEMORY_CACHE_PATH=/app/cache/dora_memory_dev.db
+      - MEMORY_CACHE_TTL_DAYS=7
+      - MEMORY_CACHE_MAX_SIZE_MB=100
+      - LOG_LEVEL=DEBUG  # More verbose logging for dev
+      - ENABLE_TRACING=true
+      - HTTP_HOST=http-server-dev
+      - HTTP_PORT=8000
+    volumes:
+      - ./cache:/app/cache
+      - ./logs:/app/logs
+    restart: unless-stopped
+    networks:
+      - dora-network
+    depends_on:
+      - http-server-dev
     command: ["uv", "run", "python", "run_bot.py"]
 
 
