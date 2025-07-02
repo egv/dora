@@ -20,9 +20,9 @@ class TestAgent(BaseAgent):
     """Test implementation of BaseAgent for testing"""
     
     def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
         self.initialized = False
         self.cleaned_up = False
+        super().__init__(*args, **kwargs)
         
     async def _initialize(self) -> None:
         """Test initialization"""

@@ -19,6 +19,7 @@ from fasta2a import FastA2A, Skill
 from fasta2a.storage import InMemoryStorage
 from fasta2a.broker import InMemoryBroker
 
+from agents.discovery import CapabilityDiscoveryMixin
 from models.a2a import (
     AgentCard,
     AgentMetrics,
@@ -37,7 +38,7 @@ from models.a2a import (
 logger = structlog.get_logger(__name__)
 
 
-class BaseAgent(ABC):
+class BaseAgent(CapabilityDiscoveryMixin, ABC):
     """
     Base class for all A2A agents in the multi-agent system.
     
@@ -69,6 +70,9 @@ class BaseAgent(ABC):
             endpoint: Communication endpoint URL
             heartbeat_interval: Heartbeat interval in seconds
         """
+        # Call parent constructors for proper multiple inheritance
+        super().__init__()
+        
         self.agent_id = agent_id
         self.name = name
         self.description = description
@@ -171,6 +175,9 @@ class BaseAgent(ABC):
             # Setup A2A communication
             await self._setup_a2a()
             
+            # Setup capability discovery
+            await self._setup_discovery()
+            
             # Start background tasks
             heartbeat_task = asyncio.create_task(self._heartbeat_loop())
             cleanup_task = asyncio.create_task(self._cleanup_loop())
@@ -209,6 +216,9 @@ class BaseAgent(ABC):
                 # FastA2A cleanup - this may not have a stop method
                 # We'll just set it to None for now
                 self._fasta2a = None
+            
+            # Cleanup discovery
+            await self._cleanup_discovery()
             
             # Agent-specific cleanup
             await self._cleanup()

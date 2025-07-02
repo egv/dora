@@ -41,7 +41,7 @@
               1
             ],
             "details": "Enable agents to query a registry or directory to retrieve agent cards, parse capability profiles, and select appropriate agents for delegation. Ensure compatibility with the agent discovery process outlined in the A2A protocol.[1][2][4]",
-            "status": "pending",
+            "status": "done",
             "testStrategy": ""
           },
           {
@@ -435,7 +435,7 @@
     ],
     "metadata": {
       "created": "2025-06-27T13:28:22.229Z",
-      "updated": "2025-07-02T18:54:37.609Z",
+      "updated": "2025-07-02T20:18:48.305Z",
       "description": "Tasks for master context"
     }
   }
