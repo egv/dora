@@ -5,49 +5,75 @@ build-backend = "hatchling.build"
 [project]
 name = "dora"
 version = "0.1.0"
-description = "Dora the Explora - an autonomous event discovery agent"
+description = "Multi-Agent Event Notification System - A distributed system with Local Calendar Intelligence, Message Generation, Audience Analysis, and Image Generation agents"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 license = { text = "MIT" }
 dependencies = [
-    "openai>=1.1.0",
+    # Core framework
+    "fastapi>=0.100.0",
+    "uvicorn>=0.23.0",
     "pydantic>=2.0.0",
     "python-dotenv>=1.0.0",
     "httpx>=0.24.0",
-    "openai-agents<=0.0.14",
-    "pytest>=7.0.0",
-    "nest-asyncio>=1.5.0",
-    "python-telegram-bot>=20.0",
+    
+    # Agent framework
+    "openai-agents>=0.0.14",
+    
+    # A2A Protocol dependencies
+    "pydantic-ai[a2a]>=0.0.9",
+    
+    # Database and caching
+    "redis>=4.5.0",
+    "psycopg2-binary>=2.9.6",
+    "asyncpg>=0.28.0",
+    
+    # AI/ML providers
+    "openai>=1.1.0",
+    "anthropic>=0.7.0",
+    
+    # MCP tools
     "mcp",
-    "fastapi>=0.115.12",
-    "uvicorn>=0.34.2",
+    
+    # Testing
+    "pytest>=7.3.1",
+    "pytest-asyncio>=0.21.0",
+    
+    # Utilities
+    "nest-asyncio>=1.5.0",
     "aiohttp>=3.12.2",
-    "bcrypt>=4.3.0",
-    "podman-compose>=1.4.0",
+    "python-multipart>=0.0.6",
+    "structlog>=23.1.0",
 ]
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=7.0.0",
+    "pytest>=7.3.1",
+    "pytest-asyncio>=0.21.0",
     "black>=23.0.0",
-    "ruff>=0.0.40",
-    "mypy>=1.0.0",
+    "ruff>=0.1.0",
+    "mypy>=1.5.0",
+    "pre-commit>=3.0.0",
+    "coverage>=7.0.0",
+    "pytest-cov>=4.1.0",
 ]
 
 [tool.ruff]
 line-length = 100
-target-version = "py39"
+target-version = "py311"
+select = ["E", "W", "F", "I", "B", "C4", "UP"]
 
 [tool.black]
 line-length = 100
-target-version = ["py39"]
+target-version = ["py311"]
 
 [tool.mypy]
-python_version = "3.9"
+python_version = "3.11"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
 disallow_incomplete_defs = true
+strict = true
 
 [dependency-groups]
 dev = [

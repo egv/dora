@@ -1,0 +1,442 @@
+{
+  "master": {
+    "tasks": [
+      {
+        "id": 1,
+        "title": "Setup Project Infrastructure with uv",
+        "description": "Initialize the project repository with proper structure and setup Python environment using uv as the package manager.",
+        "details": "Create a new repository with the following structure:\n- `/agents/` - Directory for all agent implementations\n- `/mcp_tools/` - Directory for MCP tool implementations\n- `/models/` - Directory for data models\n- `/api/` - Directory for API gateway\n- `/tests/` - Directory for tests\n\nSetup Python environment:\n1. Install uv: `curl -sSf https://install.python-poetry.org | python3 -`\n2. Create pyproject.toml with Python 3.11+ requirement\n3. Initialize virtual environment: `uv venv`\n4. Add core dependencies:\n   - FastAPI 0.100.0+\n   - Pydantic 2.0+\n   - Redis 4.5.0+\n   - psycopg2-binary 2.9.6+\n   - httpx 0.24.0+\n   - pytest 7.3.1+\n   - python-dotenv 1.0.0+\n5. Create .env.example file with required environment variables\n6. Setup .gitignore for Python projects\n7. Create README.md with project overview and setup instructions\n8. Setup pre-commit hooks for code quality\n\nImplement CI pipeline with GitHub Actions for:\n- Linting with flake8/black\n- Type checking with mypy\n- Running tests with pytest\n- Building Docker images",
+        "testStrategy": "1. Verify project structure is correctly set up\n2. Ensure uv commands work as expected: `uv sync`, `uv add`, `uv run python`\n3. Confirm virtual environment is created and activated\n4. Validate CI pipeline runs successfully on push\n5. Check that all dependencies can be installed with `uv sync`",
+        "priority": "high",
+        "dependencies": [],
+        "status": "done",
+        "subtasks": []
+      },
+      {
+        "id": 2,
+        "title": "Implement A2A Protocol Framework",
+        "description": "Develop the Agent-to-Agent (A2A) protocol framework that will enable communication between all agents in the system.",
+        "details": "Implement the A2A protocol based on Google's A2A implementation with the following components:\n\n1. Create base Agent class with:\n   - Capability registration mechanism\n   - Message handling interface\n   - Request/response patterns\n   - Error handling and retries\n   - Circuit breaker pattern implementation\n\n2. Implement capability discovery:\n   ```python\n   class Capability:\n       name: str\n       description: str\n       input_schema: dict\n       output_schema: dict\n       version: str\n   ```\n\n3. Create message format:\n   ```python\n   class A2AMessage(BaseModel):\n       message_id: str = Field(default_factory=lambda: str(uuid.uuid4()))\n       sender_id: str\n       recipient_id: str\n       capability: str\n       payload: dict\n       correlation_id: Optional[str] = None\n       timestamp: datetime = Field(default_factory=datetime.now)\n       ttl: int = 60  # seconds\n   ```\n\n4. Implement retry logic with exponential backoff:\n   ```python\n   async def send_with_retry(message, max_retries=3, base_delay=1):\n       retries = 0\n       while retries < max_retries:\n           try:\n               return await send_message(message)\n           except Exception as e:\n               retries += 1\n               if retries >= max_retries:\n                   raise\n               await asyncio.sleep(base_delay * (2 ** (retries - 1)))\n   ```\n\n5. Add authentication and authorization:\n   - JWT-based authentication between agents\n   - Role-based access control for capabilities\n\n6. Implement message versioning for backward compatibility\n\n7. Create logging and tracing:\n   - Correlation IDs for request tracing\n   - Structured logging for all messages\n   - Performance metrics collection",
+        "testStrategy": "1. Unit tests for each component of the A2A protocol\n2. Integration tests with mock agents to verify communication\n3. Performance tests to measure message throughput\n4. Security tests for authentication and authorization\n5. Fault injection tests to verify retry and circuit breaker functionality\n6. Test backward compatibility with different message versions",
+        "priority": "high",
+        "dependencies": [
+          1
+        ],
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Implement Base Agent Class",
+            "description": "Design and implement the foundational agent class, encapsulating core agent properties, lifecycle management, and communication interfaces as per A2A protocol requirements.",
+            "dependencies": [],
+            "details": "The base agent class should include agent identity, state management, and methods for sending/receiving messages. It should support both synchronous and asynchronous communication models, and integrate with the agent card structure for digital identity and capability representation.[1][3]",
+            "status": "pending",
+            "testStrategy": ""
+          },
+          {
+            "id": 2,
+            "title": "Develop Capability Discovery Mechanism",
+            "description": "Implement the logic for discovering other agents and their capabilities using the agent card structure and shared registry.",
+            "dependencies": [
+              1
+            ],
+            "details": "Enable agents to query a registry or directory to retrieve agent cards, parse capability profiles, and select appropriate agents for delegation. Ensure compatibility with the agent discovery process outlined in the A2A protocol.[1][2][4]",
+            "status": "pending",
+            "testStrategy": ""
+          },
+          {
+            "id": 3,
+            "title": "Define and Parse Message Format",
+            "description": "Establish the message structure and serialization/deserialization logic using JSON-RPC 2.0 as the payload format for A2A communication.",
+            "dependencies": [
+              1
+            ],
+            "details": "Implement message schemas for task requests, responses, status updates, and error handling. Ensure all messages conform to JSON-RPC 2.0 standards and support both text and structured payloads.[2][4]",
+            "status": "pending",
+            "testStrategy": ""
+          },
+          {
+            "id": 4,
+            "title": "Integrate Retry Logic and Task Lifecycle Management",
+            "description": "Add mechanisms for retrying failed communications and managing the full lifecycle of tasks, including initialization, monitoring, and rerouting.",
+            "dependencies": [
+              1,
+              3
+            ],
+            "details": "Implement retry strategies for transient failures, track task status, and support rerouting or reassignment as needed. Ensure stateful interactions and adaptive negotiation as described in the protocol.[3]",
+            "status": "pending",
+            "testStrategy": ""
+          },
+          {
+            "id": 5,
+            "title": "Implement Authentication and Authorization",
+            "description": "Add support for authentication and authorization using credentials specified in the agent card, such as OAuth tokens or API keys.",
+            "dependencies": [
+              1
+            ],
+            "details": "Ensure credentials are handled securely, passed via HTTP headers, and validated according to the agent's declared security level. Integrate with standard web security practices as required by A2A.[1][4]",
+            "status": "pending",
+            "testStrategy": ""
+          },
+          {
+            "id": 6,
+            "title": "Support Protocol Versioning",
+            "description": "Design mechanisms to handle protocol version negotiation and compatibility between agents.",
+            "dependencies": [
+              1,
+              3
+            ],
+            "details": "Include version information in agent cards and message headers, and implement logic to gracefully handle version mismatches or upgrades.[1]",
+            "status": "pending",
+            "testStrategy": ""
+          },
+          {
+            "id": 7,
+            "title": "Add Logging and Tracing Capabilities",
+            "description": "Integrate comprehensive logging and tracing for agent actions, message exchanges, errors, and task lifecycle events.",
+            "dependencies": [
+              1,
+              3,
+              4
+            ],
+            "details": "Ensure logs capture sufficient detail for debugging and monitoring, and support traceability across distributed agent interactions. Use structured logging formats and consider integration with external monitoring systems.[2]",
+            "status": "pending",
+            "testStrategy": ""
+          }
+        ]
+      },
+      {
+        "id": 3,
+        "title": "Develop Local Calendar Intelligence Agent",
+        "description": "Implement the Local Calendar Intelligence Agent with its three sub-agents: Multi-Source Collector, Verifier, and Calendar Builder.",
+        "details": "Implement the Local Calendar Intelligence Agent with the following components:\n\n1. Create base agent structure using the A2A protocol framework\n\n2. Implement Multi-Source Collector Sub-Agent:\n   - Integrate with Perplexity MCP for event searches\n   - Add support for weather API integration (OpenWeatherMap or similar)\n   - Implement holiday data collection from public APIs\n   - Create data collection scheduler for different data types\n   - Implement rate limiting and quota management\n\n3. Implement Verifier Sub-Agent:\n   - Create verification pipeline for events\n   - Implement cross-reference logic across multiple sources\n   - Add confidence score calculation\n   - Create filtering mechanism for low-confidence events\n   - Implement conflict resolution for contradictory data\n\n4. Implement Calendar Builder Sub-Agent:\n   - Create calendar data structure with all required layers\n   - Implement daily profile construction\n   - Add marketing opportunity score calculation\n   - Create convergence detection algorithm\n   - Implement pattern recognition for historical data\n\n5. Expose A2A capabilities:\n   - GetCalendarData\n   - GetMarketingInsights\n   - SubscribeToUpdates\n\n6. Implement data persistence with PostgreSQL:\n   - Create schema for calendar data\n   - Implement CRUD operations\n   - Add indexing for efficient queries\n   - Implement data partitioning by location and date\n\nExample code for opportunity score calculation:\n```python\ndef calculate_opportunity_score(day_data):\n    base_score = 50  # Start with neutral score\n    \n    # Event density factor (0-20 points)\n    event_count = len(day_data['events'])\n    event_score = min(20, event_count * 2)\n    \n    # Weather favorability (0-15 points)\n    weather = day_data['weather']\n    weather_score = 15 if weather['condition'] in ['clear', 'sunny'] else \\\n                   10 if weather['condition'] in ['partly_cloudy'] else \\\n                   5 if weather['condition'] in ['cloudy'] else \\\n                   0\n    \n    # Holiday/payday proximity (0-25 points)\n    holiday_score = 25 if day_data['is_holiday'] else \\\n                   15 if day_data['days_to_holiday'] <= 3 else \\\n                   10 if day_data['is_payday'] else \\\n                   0\n    \n    # Cultural considerations (0-15 points)\n    cultural_score = 15 if day_data['cultural_significance'] == 'high' else \\\n                    10 if day_data['cultural_significance'] == 'medium' else \\\n                    0\n    \n    # Historical engagement (0-25 points)\n    historical_score = min(25, day_data['historical_engagement'] * 25)\n    \n    return base_score + event_score + weather_score + holiday_score + cultural_score + historical_score\n```",
+        "testStrategy": "1. Unit tests for each sub-agent\n2. Integration tests for the complete agent\n3. Test data collection from multiple sources\n4. Verify verification pipeline with known test cases\n5. Test calendar construction with mock data\n6. Benchmark performance against requirements\n7. Test opportunity score calculation with various scenarios\n8. Verify A2A capability interfaces\n9. Test data persistence and retrieval\n10. Validate error handling and recovery",
+        "priority": "high",
+        "dependencies": [
+          2
+        ],
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Design and Implement Base Agent Structure",
+            "description": "Establish the foundational architecture for the agent, including the core decision-making engine, task management, and integration points for sub-agents and tools.",
+            "dependencies": [],
+            "details": "Define the agent's core modules, interfaces for sub-agents, and the main workflow for task orchestration. Ensure extensibility for future capabilities such as multi-source collection, verification, and calendar building.",
+            "status": "pending",
+            "testStrategy": ""
+          },
+          {
+            "id": 2,
+            "title": "Develop Multi-Source Collector Module",
+            "description": "Create a collector capable of aggregating and normalizing data from multiple heterogeneous sources.",
+            "dependencies": [
+              1
+            ],
+            "details": "Implement logic for connecting to various data sources, handling data extraction, transformation, and loading (ETL), and managing source-specific configurations. Ensure the collector can handle directory structures and mapping for each source as needed.",
+            "status": "pending",
+            "testStrategy": ""
+          },
+          {
+            "id": 3,
+            "title": "Implement Data Verifier Sub-Agent",
+            "description": "Build a verification component to validate and cross-check data collected from multiple sources.",
+            "dependencies": [
+              2
+            ],
+            "details": "Design verification logic to compare, deduplicate, and ensure the integrity and reliability of aggregated data. Incorporate both self-reported and system-level verification strategies to improve data trustworthiness.",
+            "status": "pending",
+            "testStrategy": ""
+          },
+          {
+            "id": 4,
+            "title": "Build Calendar Builder Sub-Agent",
+            "description": "Develop a module to construct and manage calendar events based on verified data.",
+            "dependencies": [
+              3
+            ],
+            "details": "Translate validated data into structured calendar entries, handle event conflicts, and provide interfaces for querying and updating calendar information.",
+            "status": "pending",
+            "testStrategy": ""
+          },
+          {
+            "id": 5,
+            "title": "Integrate Agent-to-Agent (A2A) Capabilities",
+            "description": "Enable the agent to discover, communicate, and collaborate with other agents using A2A protocols.",
+            "dependencies": [
+              1
+            ],
+            "details": "Implement capability discovery, notification, and retrieval mechanisms. Ensure the agent can participate in collaborative orchestration and task allocation with other agents in a networked environment.",
+            "status": "pending",
+            "testStrategy": ""
+          },
+          {
+            "id": 6,
+            "title": "Implement Data Persistence Layer",
+            "description": "Establish robust data storage and retrieval mechanisms for all agent modules.",
+            "dependencies": [
+              2,
+              3,
+              4
+            ],
+            "details": "Design and implement a persistence layer to store raw, processed, and verified data, as well as calendar events and agent state. Ensure data consistency, durability, and efficient access patterns.",
+            "status": "pending",
+            "testStrategy": ""
+          }
+        ]
+      },
+      {
+        "id": 4,
+        "title": "Implement Calendar Cache MCP Tool",
+        "description": "Develop the Calendar Cache MCP tool using Redis for high-performance caching of calendar data.",
+        "details": "Implement the Calendar Cache MCP tool with the following features:\n\n1. Set up Redis client with connection pooling:\n```python\nfrom redis import Redis\nfrom redis.connection import ConnectionPool\n\npool = ConnectionPool(host='redis', port=6379, db=0)\nredis_client = Redis(connection_pool=pool)\n```\n\n2. Implement core caching functions:\n   - Store events with configurable TTL\n   - Retrieve cached events by location and date range\n   - Invalidate specific cache entries\n   - Provide cache performance statistics\n\n3. Design key structure:\n   - Use `location:date_range:categories` as hash key pattern\n   - Implement JSON serialization for event data\n   - Set default 24-hour TTL with override capability\n\n4. Implement Redis features:\n   - Use native TTL for automatic expiration\n   - Implement sorted sets for event ranking\n   - Set up Pub/Sub for cache invalidation notifications\n   - Use Streams for event update history\n\n5. Create cache management functions:\n   - Cache warming for popular locations\n   - Periodic cache cleanup\n   - Cache hit/miss metrics collection\n\n6. Implement cache interface:\n```python\nclass CalendarCache:\n    def __init__(self, redis_client):\n        self.redis = redis_client\n    \n    def store_events(self, location, date_range, events, ttl=86400):\n        key = f\"{location}:{date_range}:events\"\n        serialized = json.dumps(events)\n        self.redis.set(key, serialized, ex=ttl)\n    \n    def get_events(self, location, date_range):\n        key = f\"{location}:{date_range}:events\"\n        data = self.redis.get(key)\n        if not data:\n            return None\n        return json.loads(data)\n    \n    def invalidate(self, location, date_range=None):\n        if date_range:\n            key = f\"{location}:{date_range}:events\"\n            self.redis.delete(key)\n        else:\n            pattern = f\"{location}:*:events\"\n            keys = self.redis.keys(pattern)\n            if keys:\n                self.redis.delete(*keys)\n    \n    def get_stats(self):\n        # Implementation for cache statistics\n        pass\n```\n\n7. Implement cache eviction policies:\n   - LRU (Least Recently Used) for memory management\n   - Priority-based eviction for important events\n\n8. Add monitoring and alerting for cache performance",
+        "testStrategy": "1. Unit tests for all cache operations\n2. Performance tests to verify sub-millisecond latency\n3. Load tests with high concurrency\n4. Test TTL functionality for automatic expiration\n5. Verify sorted sets for event ranking\n6. Test Pub/Sub for cache invalidation notifications\n7. Benchmark memory usage under various loads\n8. Test cache hit/miss ratio metrics\n9. Verify cache warming functionality\n10. Test cache eviction policies",
+        "priority": "high",
+        "dependencies": [
+          3
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 5,
+        "title": "Develop Message Generation Agent",
+        "description": "Implement the Message Generation Agent with its three sub-agents: Generator, Editor, and Validator.",
+        "details": "Implement the Message Generation Agent with the following components:\n\n1. Create base agent structure using the A2A protocol framework\n\n2. Implement Generator Sub-Agent:\n   - Integrate with OpenAI/Anthropic API for text generation\n   - Create prompt templates for different message types\n   - Implement language detection and support\n   - Add social group targeting parameters\n   - Create format-specific generators (push, SMS, email)\n\n3. Implement Editor Sub-Agent:\n   - Create message refinement logic\n   - Implement length adjustment algorithms\n   - Add emotional appeal enhancement\n   - Create readability optimization\n   - Implement brand voice consistency rules\n\n4. Implement Validator Sub-Agent:\n   - Create validation pipeline with multiple criteria\n   - Implement language accuracy checking\n   - Add cultural sensitivity validation\n   - Create character/word limit validation\n   - Implement engagement potential scoring\n   - Add legal compliance checking\n\n5. Implement iterative process flow:\n   - Create generation-validation-editing loop\n   - Add maximum iteration control (5 loops)\n   - Implement quality threshold checks\n   - Create early exit conditions\n   - Add timeout handling\n\n6. Expose A2A capabilities:\n   - GenerateMessage\n   - ChatMode\n\n7. Implement quality metrics:\n   - Engagement score prediction\n   - Readability scoring\n   - Cultural appropriateness evaluation\n   - Format compliance checking\n\nExample code for message generation:\n```python\nasync def generate_message(event, target_language, social_group, output_format, context=None, quality_threshold=8.5, max_iterations=5):\n    # Initial generation\n    prompt = build_prompt(event, target_language, social_group, output_format, context)\n    draft = await generate_text(prompt)\n    \n    # Validation and editing loop\n    iterations = 1\n    while iterations < max_iterations:\n        validation_result = validate_message(draft, target_language, social_group, output_format)\n        \n        if validation_result.score >= quality_threshold:\n            break\n            \n        edit_instructions = build_edit_instructions(validation_result)\n        draft = await edit_message(draft, edit_instructions)\n        iterations += 1\n    \n    return {\n        \"message\": draft,\n        \"quality_score\": validation_result.score,\n        \"iterations\": iterations,\n        \"validation_details\": validation_result.details\n    }\n```",
+        "testStrategy": "1. Unit tests for each sub-agent\n2. Integration tests for the complete agent\n3. Test message generation in multiple languages\n4. Verify validation criteria with known test cases\n5. Test editing capabilities with various inputs\n6. Benchmark performance against requirements\n7. Test iteration control and quality thresholds\n8. Verify A2A capability interfaces\n9. Test with various social groups and formats\n10. Validate error handling and recovery",
+        "priority": "high",
+        "dependencies": [
+          2
+        ],
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Design Base Structure of the Agent",
+            "description": "Establish the foundational architecture for the agent, including core components such as memory, routing, and task management layers.",
+            "dependencies": [],
+            "details": "Define the agent's main modules, persistent memory, and routing logic to enable modularity and support sub-agents. Ensure the structure supports integration with tools and external functions.",
+            "status": "pending",
+            "testStrategy": ""
+          },
+          {
+            "id": 2,
+            "title": "Implement Generator Sub-Agent",
+            "description": "Develop the generator sub-agent responsible for creating initial outputs or solutions based on input data and goals.",
+            "dependencies": [
+              1
+            ],
+            "details": "Integrate LLM or other generative models to produce candidate outputs. Ensure compatibility with the agent's memory and routing systems.",
+            "status": "pending",
+            "testStrategy": ""
+          },
+          {
+            "id": 3,
+            "title": "Develop Editor Sub-Agent",
+            "description": "Create the editor sub-agent to refine, modify, or enhance outputs generated by the generator.",
+            "dependencies": [
+              2
+            ],
+            "details": "Implement logic for iterative editing, leveraging memory and context to improve quality. Ensure the editor can interact with both generator outputs and validation feedback.",
+            "status": "pending",
+            "testStrategy": ""
+          },
+          {
+            "id": 4,
+            "title": "Build Validator Sub-Agent",
+            "description": "Construct the validator sub-agent to assess the quality, correctness, and compliance of generated and edited outputs.",
+            "dependencies": [
+              3
+            ],
+            "details": "Define validation criteria and implement automated checks. Integrate feedback mechanisms to inform the editor and generator of detected issues.",
+            "status": "pending",
+            "testStrategy": ""
+          },
+          {
+            "id": 5,
+            "title": "Establish Iterative Process Workflow",
+            "description": "Set up the iterative loop that cycles outputs through generation, editing, and validation until quality thresholds are met.",
+            "dependencies": [
+              4
+            ],
+            "details": "Implement workflow orchestration to manage dependencies, track progress, and handle failures or rework as needed. Ensure the process can adapt to changing requirements or feedback.",
+            "status": "pending",
+            "testStrategy": ""
+          },
+          {
+            "id": 6,
+            "title": "Integrate Agent-to-Agent (A2A) Capabilities",
+            "description": "Enable communication and collaboration between multiple agents or sub-agents for distributed or specialized task handling.",
+            "dependencies": [
+              5
+            ],
+            "details": "Develop protocols for message passing, task delegation, and result aggregation among agents. Ensure security and consistency in inter-agent interactions.",
+            "status": "pending",
+            "testStrategy": ""
+          },
+          {
+            "id": 7,
+            "title": "Define and Implement Quality Metrics",
+            "description": "Establish objective metrics and evaluation methods to measure the performance and output quality of the agent and its sub-agents.",
+            "dependencies": [],
+            "details": "Select relevant metrics (e.g., accuracy, completeness, efficiency), implement automated measurement tools, and integrate reporting into the workflow for continuous improvement.",
+            "status": "pending",
+            "testStrategy": ""
+          }
+        ]
+      },
+      {
+        "id": 6,
+        "title": "Implement Audience Analysis Agent",
+        "description": "Develop the Audience Analysis Agent to analyze hyperlocal calendars, determine target audiences, predict behavior patterns, and provide marketing insights.",
+        "details": "Implement the Audience Analysis Agent with the following components:\n\n1. Create base agent structure using the A2A protocol framework\n\n2. Implement core analysis capabilities:\n   - Behavioral prediction models\n   - Cultural alignment algorithms\n   - Economic timing analysis\n   - Seasonal pattern recognition\n   - Convergence opportunity identification\n\n3. Develop machine learning models:\n   - Attendance prediction model using historical data\n   - Demographic interest correlation\n   - Weather impact analysis\n   - Economic factor influence\n\n4. Implement demographic analysis:\n   - Age group segmentation\n   - Interest categorization\n   - Income level classification\n   - Cultural background analysis\n\n5. Create ROI estimation:\n   - Marketing cost calculation\n   - Engagement prediction\n   - Conversion modeling\n   - Return calculation\n\n6. Implement recommendation engine:\n   - Target group prioritization\n   - Channel selection\n   - Timing optimization\n   - Message type suggestions\n\n7. Expose A2A capabilities:\n   - AnalyzeAudience\n\nExample code for audience analysis:\n```python\nasync def analyze_audience(event, location_demographics, historical_data_available=True):\n    # Base audience profile\n    base_profile = determine_base_profile(event)\n    \n    # Enhance with location demographics\n    enhanced_profile = enhance_with_demographics(base_profile, location_demographics)\n    \n    # Apply contextual factors\n    if historical_data_available:\n        historical_patterns = await get_historical_patterns(event.type, event.location)\n        enhanced_profile = apply_historical_patterns(enhanced_profile, historical_patterns)\n    \n    # Weather impact analysis\n    weather_forecast = await get_weather_forecast(event.location, event.date)\n    weather_adjusted_profile = adjust_for_weather(enhanced_profile, weather_forecast)\n    \n    # Economic factors\n    economic_context = await get_economic_context(event.location, event.date)\n    final_profile = adjust_for_economic_factors(weather_adjusted_profile, economic_context)\n    \n    # Generate recommendations\n    recommendations = generate_marketing_recommendations(final_profile, event)\n    \n    return {\n        \"target_groups\": final_profile.target_groups,\n        \"predicted_attendance\": calculate_attendance_prediction(final_profile, event),\n        \"recommendations\": recommendations\n    }\n```",
+        "testStrategy": "1. Unit tests for each analysis component\n2. Integration tests for the complete agent\n3. Test with various event types and locations\n4. Verify prediction accuracy with historical data\n5. Test demographic analysis with different profiles\n6. Benchmark performance against requirements\n7. Test recommendation quality with expert evaluation\n8. Verify A2A capability interfaces\n9. Test with and without historical data\n10. Validate error handling and recovery",
+        "priority": "medium",
+        "dependencies": [
+          2,
+          3
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 7,
+        "title": "Develop Image Generation Agent",
+        "description": "Implement the Image Generation Agent with its three sub-agents: Prompt Builder, Generator, and Verifier.",
+        "details": "Implement the Image Generation Agent with the following components:\n\n1. Create base agent structure using the A2A protocol framework\n\n2. Implement Prompt Builder Sub-Agent:\n   - Create event-to-visual-description conversion\n   - Implement text overlay specification\n   - Add style adaptation based on event type\n   - Create technical requirement specification\n   - Implement prompt template management\n\n3. Implement Generator Sub-Agent:\n   - Create MCP tool interface for image generation\n   - Implement multiple generation attempt management\n   - Add parameter control (quality, style, variations)\n   - Create cost and quota tracking\n   - Implement image storage with metadata\n\n4. Implement Verifier Sub-Agent:\n   - Integrate OCR for text verification\n   - Add object detection for element confirmation\n   - Implement brand compliance checking\n   - Create composition and quality analysis\n   - Add accessibility checking\n   - Implement human review queue management\n\n5. Create verification process flow:\n   - Implement autonomous verification pipeline\n   - Add confidence score calculation\n   - Create decision point logic\n   - Implement human review integration\n   - Add feedback collection and processing\n\n6. Expose A2A capabilities:\n   - GenerateEventImage\n   - ReviewQueueStatus\n\n7. Implement MCP integration:\n   - Create pluggable MCP interface\n   - Add support for multiple providers\n   - Implement cost tracking\n   - Add rate limiting and quota management\n\nExample code for image generation and verification:\n```python\nasync def generate_event_image(event, image_specs, text_overlay, style_prefs, verification_mode=\"autonomous\", max_attempts=3):\n    # Build prompt\n    prompt = prompt_builder.build_prompt(event, image_specs, text_overlay, style_prefs)\n    \n    # Generate image\n    for attempt in range(max_attempts):\n        image_result = await image_generator.generate(prompt, image_specs)\n        \n        # Verify image\n        verification_result = await image_verifier.verify(image_result, text_overlay, style_prefs)\n        \n        if verification_result.confidence > 85 or verification_mode == \"none\":\n            return {\n                \"image_url\": image_result.url,\n                \"cdn_url\": await upload_to_cdn(image_result.url),\n                \"verification\": verification_result,\n                \"metadata\": {\n                    \"prompt\": prompt,\n                    \"attempts\": attempt + 1,\n                    \"generation_time\": image_result.generation_time,\n                    \"cost\": image_result.cost\n                }\n            }\n        elif verification_result.confidence > 70 and verification_mode == \"human-assisted\":\n            # Queue for human review\n            review_id = await queue_for_review(image_result, verification_result, prompt)\n            return {\n                \"image_url\": image_result.url,\n                \"verification\": verification_result,\n                \"review_status\": \"pending\",\n                \"review_id\": review_id,\n                \"metadata\": {\n                    \"prompt\": prompt,\n                    \"attempts\": attempt + 1\n                }\n            }\n        \n        # If we get here, regenerate with refined prompt\n        prompt = prompt_builder.refine_prompt(prompt, verification_result.issues)\n    \n    # If all attempts failed\n    raise MaxAttemptsExceeded(f\"Failed to generate acceptable image after {max_attempts} attempts\")\n```",
+        "testStrategy": "1. Unit tests for each sub-agent\n2. Integration tests for the complete agent\n3. Test prompt building with various event types\n4. Verify image generation with different parameters\n5. Test verification pipeline with known test cases\n6. Benchmark performance against requirements\n7. Test human review workflow\n8. Verify A2A capability interfaces\n9. Test with multiple MCP providers\n10. Validate error handling and recovery",
+        "priority": "medium",
+        "dependencies": [
+          2
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 8,
+        "title": "Implement Image Generation MCP Tool",
+        "description": "Develop the Image Generation MCP tool that provides a pluggable interface for different image generation services.",
+        "details": "Implement the Image Generation MCP tool with the following features:\n\n1. Create pluggable provider interface:\n```python\nclass ImageGenerationProvider(ABC):\n    @abstractmethod\n    async def generate_image(self, prompt: str, width: int, height: int, **kwargs) -> ImageGenerationResult:\n        pass\n        \n    @abstractmethod\n    def get_cost(self, width: int, height: int, **kwargs) -> float:\n        pass\n```\n\n2. Implement provider implementations:\n   - OpenAI DALL-E 3 provider\n   - Stability AI provider\n   - Midjourney API provider (if available)\n   - Fallback provider mechanism\n\n3. Create MCP tool interface:\n```python\nclass ImageGenerationMCP:\n    def __init__(self, providers: Dict[str, ImageGenerationProvider], default_provider: str):\n        self.providers = providers\n        self.default_provider = default_provider\n        \n    async def generate_image(self, prompt: str, width: int, height: int, provider: Optional[str] = None, **kwargs) -> ImageGenerationResult:\n        selected_provider = provider or self.default_provider\n        if selected_provider not in self.providers:\n            raise ProviderNotFound(f\"Provider {selected_provider} not found\")\n            \n        try:\n            return await self.providers[selected_provider].generate_image(prompt, width, height, **kwargs)\n        except Exception as e:\n            if provider:  # If specific provider was requested, don't try fallback\n                raise\n            # Try fallback providers\n            for fallback_provider, provider_instance in self.providers.items():\n                if fallback_provider != selected_provider:\n                    try:\n                        return await provider_instance.generate_image(prompt, width, height, **kwargs)\n                    except Exception:\n                        continue\n            # If all providers failed\n            raise AllProvidersFailedError(\"All image generation providers failed\")\n```\n\n4. Implement cost tracking and quota management:\n   - Track cost per generation\n   - Implement provider-specific quota limits\n   - Add budget controls\n\n5. Create image storage and CDN integration:\n   - Store generated images\n   - Upload to CDN for delivery\n   - Implement automatic cleanup\n\n6. Add monitoring and metrics:\n   - Track generation time\n   - Monitor success/failure rates\n   - Collect cost metrics\n   - Track provider performance",
+        "testStrategy": "1. Unit tests for each provider implementation\n2. Integration tests for the complete MCP tool\n3. Test image generation with various parameters\n4. Verify fallback mechanism with simulated failures\n5. Test cost tracking accuracy\n6. Benchmark performance against requirements\n7. Test CDN integration\n8. Verify quota management\n9. Test with multiple concurrent requests\n10. Validate error handling and recovery",
+        "priority": "medium",
+        "dependencies": [
+          7
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 9,
+        "title": "Implement PostgreSQL Database Schema",
+        "description": "Design and implement the PostgreSQL database schema for storing all system data, including events, verification history, and analytics.",
+        "details": "Design and implement the PostgreSQL database schema with the following components:\n\n1. Create calendar entry table:\n```sql\nCREATE TABLE calendar_entries (\n    id SERIAL PRIMARY KEY,\n    location_id INTEGER NOT NULL REFERENCES locations(id),\n    date DATE NOT NULL,\n    day_of_week INTEGER NOT NULL,\n    week_of_month INTEGER NOT NULL,\n    season VARCHAR(20) NOT NULL,\n    weather_summary JSONB,\n    events_summary JSONB,\n    holidays_summary JSONB,\n    cultural_summary JSONB,\n    economic_summary JSONB,\n    social_summary JSONB,\n    marketing_opportunity_score INTEGER NOT NULL,\n    recommended_themes JSONB,\n    target_audience_suggestions JSONB,\n    optimal_outreach_times JSONB,\n    risk_factors JSONB,\n    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),\n    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),\n    UNIQUE(location_id, date)\n);\n\nCREATE INDEX idx_calendar_entries_location_date ON calendar_entries(location_id, date);\nCREATE INDEX idx_calendar_entries_opportunity_score ON calendar_entries(marketing_opportunity_score);\n```\n\n2. Create events table:\n```sql\nCREATE TABLE events (\n    id SERIAL PRIMARY KEY,\n    title VARCHAR(255) NOT NULL,\n    description TEXT,\n    location_id INTEGER NOT NULL REFERENCES locations(id),\n    venue VARCHAR(255),\n    start_time TIMESTAMP WITH TIME ZONE NOT NULL,\n    end_time TIMESTAMP WITH TIME ZONE,\n    category VARCHAR(100) NOT NULL,\n    subcategory VARCHAR(100),\n    price_range JSONB,\n    url VARCHAR(512),\n    image_url VARCHAR(512),\n    status VARCHAR(20) NOT NULL DEFAULT 'active',\n    verification_status VARCHAR(20) NOT NULL DEFAULT 'pending',\n    verification_confidence FLOAT,\n    verification_sources JSONB,\n    last_verified_at TIMESTAMP WITH TIME ZONE,\n    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),\n    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()\n);\n\nCREATE INDEX idx_events_location_date ON events(location_id, (DATE(start_time)));\nCREATE INDEX idx_events_category ON events(category);\nCREATE INDEX idx_events_verification_status ON events(verification_status);\n```\n\n3. Create verification history table:\n```sql\nCREATE TABLE verification_history (\n    id SERIAL PRIMARY KEY,\n    event_id INTEGER NOT NULL REFERENCES events(id),\n    verification_status VARCHAR(20) NOT NULL,\n    verification_confidence FLOAT,\n    verification_sources JSONB,\n    verification_notes TEXT,\n    verified_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()\n);\n\nCREATE INDEX idx_verification_history_event ON verification_history(event_id);\n```\n\n4. Create social groups table:\n```sql\nCREATE TABLE social_groups (\n    id SERIAL PRIMARY KEY,\n    name VARCHAR(100) NOT NULL,\n    age_min INTEGER,\n    age_max INTEGER,\n    interests JSONB,\n    cultural_background JSONB,\n    income_level VARCHAR(20),\n    preferred_languages JSONB,\n    communication_preferences JSONB,\n    behavioral_patterns JSONB,\n    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),\n    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()\n);\n```\n\n5. Create generated content table:\n```sql\nCREATE TABLE generated_content (\n    id SERIAL PRIMARY KEY,\n    event_id INTEGER REFERENCES events(id),\n    social_group_id INTEGER REFERENCES social_groups(id),\n    content_type VARCHAR(50) NOT NULL,\n    content TEXT,\n    image_url VARCHAR(512),\n    language VARCHAR(10) NOT NULL,\n    quality_score FLOAT,\n    generation_metadata JSONB,\n    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()\n);\n\nCREATE INDEX idx_generated_content_event ON generated_content(event_id);\nCREATE INDEX idx_generated_content_social_group ON generated_content(social_group_id);\n```\n\n6. Create analytics table:\n```sql\nCREATE TABLE analytics (\n    id SERIAL PRIMARY KEY,\n    date DATE NOT NULL,\n    location_id INTEGER NOT NULL REFERENCES locations(id),\n    events_discovered INTEGER NOT NULL DEFAULT 0,\n    events_verified INTEGER NOT NULL DEFAULT 0,\n    verification_success_rate FLOAT,\n    messages_generated INTEGER NOT NULL DEFAULT 0,\n    images_generated INTEGER NOT NULL DEFAULT 0,\n    audience_analyses_performed INTEGER NOT NULL DEFAULT 0,\n    api_calls JSONB,\n    error_counts JSONB,\n    performance_metrics JSONB,\n    cost_metrics JSONB,\n    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()\n);\n\nCREATE INDEX idx_analytics_date_location ON analytics(date, location_id);\n```\n\n7. Implement data retention policies:\n   - Create partitioning for time-series data\n   - Implement automatic archiving for old data\n   - Set up data pruning for completed/cancelled events",
+        "testStrategy": "1. Verify schema creation with test database\n2. Test data insertion and retrieval for each table\n3. Verify index performance with large datasets\n4. Test foreign key constraints\n5. Benchmark query performance for common operations\n6. Test data retention policies\n7. Verify partitioning functionality\n8. Test concurrent access patterns\n9. Validate backup and restore procedures\n10. Test data migration scripts",
+        "priority": "high",
+        "dependencies": [
+          1
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 10,
+        "title": "Implement API Gateway",
+        "description": "Develop the API Gateway that provides RESTful and GraphQL interfaces for external client access to the system.",
+        "details": "Implement the API Gateway with the following components:\n\n1. Create FastAPI application structure:\n```python\nfrom fastapi import FastAPI, Depends, HTTPException, Security\nfrom fastapi.security import APIKeyHeader\nfrom fastapi.middleware.cors import CORSMiddleware\n\napp = FastAPI(\n    title=\"Multi-Agent Event Notification System API\",\n    description=\"API Gateway for the Multi-Agent Event Notification System\",\n    version=\"1.0.0\"\n)\n\n# Add CORS middleware\napp.add_middleware(\n    CORSMiddleware,\n    allow_origins=[\"*\"],  # Restrict in production\n    allow_credentials=True,\n    allow_methods=[\"*\"],\n    allow_headers=[\"*\"],\n)\n\n# API key security\napi_key_header = APIKeyHeader(name=\"X-API-Key\")\n\ndef get_api_key(api_key: str = Security(api_key_header)):\n    if api_key not in valid_api_keys:\n        raise HTTPException(status_code=403, detail=\"Invalid API key\")\n    return api_key\n```\n\n2. Implement RESTful endpoints:\n   - Calendar data endpoints\n   - Event management endpoints\n   - Message generation endpoints\n   - Image generation endpoints\n   - Audience analysis endpoints\n\n3. Implement GraphQL interface:\n   - Create schema with Strawberry or Ariadne\n   - Implement resolvers for all data types\n   - Add subscription support for real-time updates\n\n4. Add WebSocket support:\n   - Implement connection handling\n   - Add authentication for WebSocket connections\n   - Create subscription mechanism\n   - Implement real-time updates\n\n5. Implement security features:\n   - API key management\n   - Rate limiting with Redis\n   - Quota management per client\n   - Request validation\n\n6. Add monitoring and logging:\n   - Request/response logging\n   - Performance metrics collection\n   - Error tracking\n   - Distributed tracing integration\n\n7. Implement client SDKs:\n   - Generate OpenAPI documentation\n   - Create Python client library\n   - Add JavaScript client library\n\nExample GraphQL schema:\n```graphql\ntype Event {\n  id: ID!\n  title: String!\n  description: String\n  location: Location!\n  venue: String\n  startTime: DateTime!\n  endTime: DateTime\n  category: String!\n  subcategory: String\n  priceRange: PriceRange\n  url: String\n  imageUrl: String\n  status: String!\n  verificationStatus: String!\n}\n\ntype CalendarEntry {\n  id: ID!\n  location: Location!\n  date: Date!\n  weatherSummary: WeatherSummary\n  events: [Event!]!\n  holidays: [Holiday!]!\n  marketingOpportunityScore: Int!\n  recommendedThemes: [String!]!\n}\n\ntype Query {\n  getCalendarData(locationId: ID!, startDate: Date!, endDate: Date!): [CalendarEntry!]!\n  getEvent(id: ID!): Event\n  searchEvents(locationId: ID!, query: String, category: String, startDate: Date, endDate: Date): [Event!]!\n}\n\ntype Mutation {\n  generateMessage(eventId: ID!, socialGroupId: ID!, language: String!, format: String!): GeneratedMessage!\n  generateImage(eventId: ID!, specs: ImageSpecsInput!): GeneratedImage!\n  analyzeAudience(eventId: ID!): AudienceAnalysis!\n}\n\ntype Subscription {\n  calendarUpdates(locationId: ID!): CalendarEntry!\n  eventStatusChanges(eventIds: [ID!]): Event!\n}\n```",
+        "testStrategy": "1. Unit tests for all API endpoints\n2. Integration tests with the agent system\n3. Load testing with realistic traffic patterns\n4. Security testing (authentication, authorization)\n5. GraphQL query performance testing\n6. WebSocket connection testing\n7. Rate limiting verification\n8. Client SDK testing\n9. Error handling verification\n10. Documentation accuracy testing",
+        "priority": "medium",
+        "dependencies": [
+          2,
+          3,
+          5,
+          6,
+          7
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 11,
+        "title": "Implement Monitoring and Observability",
+        "description": "Set up comprehensive monitoring, logging, and observability for the entire system to track performance, detect issues, and provide insights.",
+        "details": "Implement monitoring and observability with the following components:\n\n1. Set up structured logging:\n```python\nimport structlog\nimport logging\nfrom pythonjsonlogger import jsonlogger\n\n# Configure structlog\nstructlog.configure(\n    processors=[\n        structlog.stdlib.add_log_level,\n        structlog.stdlib.add_logger_name,\n        structlog.processors.TimeStamper(fmt=\"iso\"),\n        structlog.processors.StackInfoRenderer(),\n        structlog.processors.format_exc_info,\n        structlog.processors.UnicodeDecoder(),\n        structlog.processors.JSONRenderer()\n    ],\n    context_class=dict,\n    logger_factory=structlog.stdlib.LoggerFactory(),\n    wrapper_class=structlog.stdlib.BoundLogger,\n    cache_logger_on_first_use=True,\n)\n\n# Set up JSON formatter for standard library logging\nlogger = logging.getLogger()\nhandler = logging.StreamHandler()\nformatter = jsonlogger.JsonFormatter('%(timestamp)s %(level)s %(name)s %(message)s')\nhandler.setFormatter(formatter)\nlogger.addHandler(handler)\nlogger.setLevel(logging.INFO)\n```\n\n2. Implement distributed tracing:\n   - Set up OpenTelemetry for tracing\n   - Add trace context propagation\n   - Implement span creation for key operations\n   - Add trace exporters (Jaeger, Zipkin)\n\n3. Set up metrics collection:\n   - Implement Prometheus metrics\n   - Add custom metrics for key operations\n   - Set up metric exporters\n   - Create dashboards in Grafana\n\n4. Implement health checks:\n   - Add readiness probes\n   - Implement liveness probes\n   - Create dependency health checks\n   - Set up synthetic monitoring\n\n5. Set up alerting:\n   - Configure alert rules\n   - Implement notification channels\n   - Add escalation policies\n   - Create on-call rotations\n\n6. Implement cost tracking:\n   - Track API usage costs\n   - Monitor resource utilization\n   - Implement budget alerts\n   - Create cost optimization recommendations\n\n7. Set up performance profiling:\n   - Implement continuous profiling\n   - Add performance benchmarks\n   - Create performance regression detection\n   - Implement hotspot identification\n\nExample Prometheus metrics:\n```python\nfrom prometheus_client import Counter, Histogram, Gauge, Summary\n\n# Counters\nevent_discovery_total = Counter('event_discovery_total', 'Total number of events discovered', ['location', 'source'])\nevent_verification_total = Counter('event_verification_total', 'Total number of events verified', ['location', 'result'])\nmessage_generation_total = Counter('message_generation_total', 'Total number of messages generated', ['language', 'format'])\nimage_generation_total = Counter('image_generation_total', 'Total number of images generated', ['provider'])\n\n# Histograms\nevent_discovery_duration = Histogram('event_discovery_duration_seconds', 'Event discovery duration in seconds', ['location'])\nverification_duration = Histogram('verification_duration_seconds', 'Verification duration in seconds')\nmessage_generation_duration = Histogram('message_generation_duration_seconds', 'Message generation duration in seconds', ['language'])\nimage_generation_duration = Histogram('image_generation_duration_seconds', 'Image generation duration in seconds', ['provider'])\n\n# Gauges\ncache_size = Gauge('cache_size_bytes', 'Current size of cache in bytes')\ncache_items = Gauge('cache_items', 'Number of items in cache', ['type'])\nqueue_size = Gauge('queue_size', 'Current size of queue', ['queue_name'])\n\n# Summaries\nopportunity_score = Summary('opportunity_score', 'Marketing opportunity score', ['location'])\nverification_confidence = Summary('verification_confidence', 'Verification confidence score')\nmessage_quality_score = Summary('message_quality_score', 'Message quality score', ['language'])\n```",
+        "testStrategy": "1. Verify structured logging format and content\n2. Test distributed tracing across services\n3. Validate metrics collection and accuracy\n4. Test health check endpoints\n5. Verify alerting functionality with simulated issues\n6. Test cost tracking accuracy\n7. Validate performance profiling data\n8. Test dashboard functionality\n9. Verify log aggregation and search\n10. Test observability during failure scenarios",
+        "priority": "medium",
+        "dependencies": [
+          3,
+          4,
+          5,
+          6,
+          7,
+          8
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 12,
+        "title": "Implement Event Re-verification System",
+        "description": "Develop the automated re-verification system that periodically checks event status, detects cancellations, and updates the calendar accordingly.",
+        "details": "Implement the event re-verification system with the following components:\n\n1. Create re-verification scheduler:\n```python\nfrom apscheduler.schedulers.asyncio import AsyncIOScheduler\nfrom apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore\nfrom apscheduler.executors.pool import ThreadPoolExecutor, ProcessPoolExecutor\n\njobstores = {\n    'default': SQLAlchemyJobStore(url='postgresql://user:password@localhost/scheduler')\n}\n\nexecutors = {\n    'default': ThreadPoolExecutor(20),\n    'processpool': ProcessPoolExecutor(5)\n}\n\njob_defaults = {\n    'coalesce': False,\n    'max_instances': 3\n}\n\nscheduler = AsyncIOScheduler(\n    jobstores=jobstores,\n    executors=executors,\n    job_defaults=job_defaults,\n)\n```\n\n2. Implement re-verification logic:\n   - Create priority-based verification queue\n   - Implement verification frequency rules\n   - Add source selection for re-verification\n   - Create status change detection\n   - Implement cancellation detection\n\n3. Create verification strategies:\n   - URL checking for event pages\n   - API calls to ticketing platforms\n   - Search-based verification\n   - Multi-source consensus\n\n4. Implement status update handling:\n   - Create status change workflow\n   - Add notification generation for changes\n   - Implement calendar update mechanism\n   - Create audit trail for changes\n\n5. Add monitoring and metrics:\n   - Track re-verification success rate\n   - Monitor cancellation detection time\n   - Measure verification accuracy\n   - Track resource utilization\n\nExample re-verification function:\n```python\nasync def reverify_event(event_id):\n    event = await get_event(event_id)\n    \n    # Skip if event already completed or cancelled\n    if event.status in ['completed', 'cancelled']:\n        return\n    \n    # Determine verification strategy based on event type and available sources\n    strategy = determine_verification_strategy(event)\n    \n    # Execute verification\n    verification_result = await execute_verification(event, strategy)\n    \n    # Update event status if changed\n    if verification_result.status != event.status:\n        await update_event_status(\n            event_id=event_id,\n            new_status=verification_result.status,\n            confidence=verification_result.confidence,\n            sources=verification_result.sources,\n            notes=verification_result.notes\n        )\n        \n        # If cancelled, trigger notifications\n        if verification_result.status == 'cancelled':\n            await trigger_cancellation_notifications(event)\n            \n        # Update calendar\n        await update_calendar_for_event(event)\n    \n    # Schedule next verification based on event proximity and importance\n    next_verification = calculate_next_verification_time(event)\n    scheduler.add_job(\n        reverify_event,\n        'date',\n        run_date=next_verification,\n        args=[event_id],\n        id=f'reverify_{event_id}_{next_verification.isoformat()}',\n        replace_existing=True\n    )\n    \n    # Record verification in history\n    await record_verification_history(\n        event_id=event_id,\n        status=verification_result.status,\n        confidence=verification_result.confidence,\n        sources=verification_result.sources,\n        notes=verification_result.notes\n    )\n```",
+        "testStrategy": "1. Unit tests for verification strategies\n2. Integration tests for the complete system\n3. Test with simulated event changes\n4. Verify cancellation detection accuracy\n5. Test scheduler functionality\n6. Benchmark performance against requirements\n7. Test with various event types and sources\n8. Verify notification generation for changes\n9. Test audit trail completeness\n10. Validate metrics collection",
+        "priority": "medium",
+        "dependencies": [
+          3,
+          4
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 13,
+        "title": "Implement Human Review Interface",
+        "description": "Develop the human review interface for image verification and feedback collection.",
+        "details": "Implement the human review interface with the following components:\n\n1. Create web-based review interface:\n   - Implement React-based frontend\n   - Add responsive design for mobile\n   - Create efficient review workflow\n   - Implement keyboard shortcuts\n   - Add batch review capabilities\n\n2. Implement authentication and authorization:\n   - Create user management\n   - Implement role-based access control\n   - Add session management\n   - Implement audit logging\n\n3. Create review queue management:\n   - Implement priority-based queue\n   - Add assignment mechanism\n   - Create SLA tracking\n   - Implement load balancing\n\n4. Implement review workflow:\n   - Create image display with metadata\n   - Add verification criteria display\n   - Implement approval/rejection/modification options\n   - Create feedback collection form\n   - Add before/after comparison for edits\n\n5. Create reviewer dashboard:\n   - Implement performance metrics\n   - Add queue status display\n   - Create review history\n   - Implement notification system\n\n6. Add API endpoints:\n```python\n@app.post(\"/api/reviews/{review_id}/decision\")\nasync def submit_review_decision(\n    review_id: str,\n    decision: ReviewDecision,\n    current_user: User = Depends(get_current_user)\n):\n    if not current_user.has_permission(\"submit_review\"):\n        raise HTTPException(status_code=403, detail=\"Not authorized\")\n        \n    review = await get_review(review_id)\n    if review.status != \"pending\":\n        raise HTTPException(status_code=400, detail=\"Review already completed\")\n        \n    if review.assigned_to != current_user.id and not current_user.has_permission(\"review_any\"):\n        raise HTTPException(status_code=403, detail=\"Not assigned to this review\")\n        \n    await update_review_decision(\n        review_id=review_id,\n        decision=decision.decision,\n        feedback=decision.feedback,\n        reviewer_id=current_user.id\n    )\n    \n    # If approved, update image status\n    if decision.decision == \"approved\":\n        await update_image_status(review.image_id, \"approved\")\n        \n    # If rejected, trigger regeneration if requested\n    elif decision.decision == \"rejected\" and decision.regenerate:\n        await trigger_image_regeneration(\n            review.image_id,\n            feedback=decision.feedback\n        )\n        \n    # If modification requested, queue for editing\n    elif decision.decision == \"modify\":\n        await queue_image_for_editing(\n            review.image_id,\n            modifications=decision.modifications\n        )\n        \n    return {\"status\": \"success\"}\n```\n\n7. Implement feedback processing:\n   - Create feedback categorization\n   - Implement prompt improvement suggestions\n   - Add model training data collection\n   - Create performance analytics",
+        "testStrategy": "1. Unit tests for API endpoints\n2. Integration tests for the complete system\n3. UI testing with Cypress\n4. User acceptance testing with reviewers\n5. Performance testing with large queues\n6. Security testing (authentication, authorization)\n7. Mobile responsiveness testing\n8. Accessibility testing\n9. Workflow efficiency testing\n10. Feedback processing verification",
+        "priority": "low",
+        "dependencies": [
+          7,
+          8
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 14,
+        "title": "Implement Multi-language Support",
+        "description": "Add comprehensive multi-language support for message generation and audience analysis.",
+        "details": "Implement multi-language support with the following components:\n\n1. Create language detection:\n```python\nfrom langdetect import detect, LangDetectException\n\ndef detect_language(text):\n    try:\n        return detect(text)\n    except LangDetectException:\n        return 'en'  # Default to English if detection fails\n```\n\n2. Implement language-specific message generation:\n   - Create language-specific prompt templates\n   - Implement cultural adaptation for languages\n   - Add language-specific quality checks\n   - Create language detection for input text\n   - Implement language-specific readability scoring\n\n3. Add translation capabilities:\n   - Integrate with translation APIs\n   - Implement translation memory\n   - Add terminology management\n   - Create quality assurance for translations\n\n4. Implement multilingual audience analysis:\n   - Create language preference detection\n   - Implement cultural background analysis\n   - Add regional preference modeling\n   - Create language-specific engagement prediction\n\n5. Add language-specific data sources:\n   - Implement language-specific event sources\n   - Add cultural calendar integration\n   - Create regional holiday databases\n   - Implement language-specific news sources\n\n6. Create language configuration:\n   - Implement language preference settings\n   - Add default language selection\n   - Create language fallback chain\n   - Implement language-specific formatting\n\n7. Add internationalization (i18n) support:\n   - Implement locale-aware date formatting\n   - Add currency formatting\n   - Create number formatting\n   - Implement time zone handling\n\nExample language-specific message generation:\n```python\nasync def generate_message_in_language(event, language, social_group):\n    # Get language-specific prompt template\n    template = get_prompt_template(language, event.category)\n    \n    # Add language-specific cultural context\n    cultural_context = get_cultural_context(language, event.location, event.date)\n    \n    # Build prompt with language-specific elements\n    prompt = template.format(\n        event_title=event.title,\n        event_description=event.description,\n        event_date=format_date_for_locale(event.start_time, language),\n        event_time=format_time_for_locale(event.start_time, language),\n        event_venue=event.venue,\n        cultural_context=cultural_context,\n        social_group=social_group.name\n    )\n    \n    # Generate message with language-specific model if available\n    if language in language_specific_models:\n        message = await generate_with_language_model(prompt, language_specific_models[language])\n    else:\n        message = await generate_with_multilingual_model(prompt, language)\n    \n    # Validate with language-specific checks\n    validation_result = validate_message_for_language(message, language)\n    if not validation_result.is_valid:\n        # Apply language-specific fixes\n        message = await fix_language_issues(message, validation_result.issues, language)\n    \n    return message\n```",
+        "testStrategy": "1. Unit tests for language detection\n2. Integration tests for message generation in multiple languages\n3. Test with native speakers for quality assessment\n4. Verify cultural adaptation accuracy\n5. Test translation quality\n6. Benchmark performance across languages\n7. Test with various character sets and encodings\n8. Verify locale-specific formatting\n9. Test language fallback mechanism\n10. Validate language-specific quality checks",
+        "priority": "low",
+        "dependencies": [
+          5,
+          6
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 15,
+        "title": "Implement Analytics Dashboard",
+        "description": "Develop a comprehensive analytics dashboard for monitoring system performance, tracking marketing effectiveness, and providing business intelligence.",
+        "details": "Implement the analytics dashboard with the following components:\n\n1. Create data collection pipeline:\n   - Implement event tracking\n   - Add performance metrics collection\n   - Create cost tracking\n   - Implement user engagement metrics\n   - Add business outcome tracking\n\n2. Implement data storage:\n   - Create time-series database for metrics\n   - Implement data aggregation\n   - Add data retention policies\n   - Create data partitioning strategy\n\n3. Develop dashboard frontend:\n   - Implement React-based dashboard\n   - Add responsive design\n   - Create interactive visualizations\n   - Implement filtering and sorting\n   - Add export capabilities\n\n4. Create dashboard sections:\n   - System performance dashboard\n   - Marketing effectiveness dashboard\n   - Cost analysis dashboard\n   - Event discovery dashboard\n   - Message performance dashboard\n   - Audience analysis dashboard\n\n5. Implement real-time updates:\n   - Add WebSocket for live updates\n   - Create real-time alerts\n   - Implement trend detection\n   - Add anomaly highlighting\n\n6. Create reporting capabilities:\n   - Implement scheduled reports\n   - Add PDF export\n   - Create data export in multiple formats\n   - Implement report templates\n\n7. Add predictive analytics:\n   - Implement trend forecasting\n   - Add ROI prediction\n   - Create audience growth modeling\n   - Implement performance prediction\n\nExample dashboard API endpoint:\n```python\n@app.get(\"/api/analytics/performance\")\nasync def get_performance_metrics(\n    start_date: date,\n    end_date: date,\n    location_id: Optional[int] = None,\n    metrics: List[str] = Query([\"events_discovered\", \"verification_success_rate\", \"messages_generated\"]),\n    interval: str = \"day\",\n    current_user: User = Depends(get_current_user)\n):\n    if not current_user.has_permission(\"view_analytics\"):\n        raise HTTPException(status_code=403, detail=\"Not authorized\")\n        \n    # Validate date range\n    if (end_date - start_date).days > 90 and interval == \"hour\":\n        raise HTTPException(status_code=400, detail=\"Hour interval limited to 90 days max\")\n        \n    # Build query based on parameters\n    query_params = {\n        \"start_date\": start_date,\n        \"end_date\": end_date,\n        \"interval\": interval,\n        \"metrics\": metrics\n    }\n    \n    if location_id:\n        query_params[\"location_id\"] = location_id\n        \n    # Get data from analytics service\n    try:\n        results = await analytics_service.get_performance_metrics(**query_params)\n        return results\n    except Exception as e:\n        logger.error(\"Analytics query failed\", exc_info=e)\n        raise HTTPException(status_code=500, detail=\"Analytics query failed\")\n```",
+        "testStrategy": "1. Unit tests for data collection\n2. Integration tests for the complete system\n3. UI testing with Cypress\n4. Performance testing with large datasets\n5. Test real-time updates\n6. Verify report generation\n7. Test data export functionality\n8. Validate predictive analytics accuracy\n9. Test dashboard responsiveness\n10. Verify data accuracy across all metrics",
+        "priority": "low",
+        "dependencies": [
+          3,
+          5,
+          6,
+          7,
+          11
+        ],
+        "status": "pending",
+        "subtasks": []
+      }
+    ],
+    "metadata": {
+      "created": "2025-06-27T13:28:22.229Z",
+      "updated": "2025-07-02T15:36:10.999Z",
+      "description": "Tasks for master context"
+    }
+  }
+}
