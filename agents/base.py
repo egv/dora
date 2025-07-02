@@ -33,6 +33,20 @@ from models.a2a import (
     MessageType,
     TaskStatus,
 )
+from models.jsonrpc import (
+    A2AMessageEnvelope,
+    JSONRPCRequest,
+    JSONRPCResponse,
+    JSONRPCErrorResponse,
+    JSONRPCNotification,
+    JSONRPCError,
+    JSONRPCErrorCode,
+    A2AMethod,
+    create_success_response,
+    create_error_response,
+)
+from models.validation import validate_message, ValidationResult
+from agents.messaging import get_message_router, register_message_handler
 
 
 logger = structlog.get_logger(__name__)
@@ -91,6 +105,7 @@ class BaseAgent(CapabilityDiscoveryMixin, ABC):
         self._fasta2a: Optional[FastA2A] = None
         self._message_handlers: Dict[MessageType, Any] = {}
         self._running_tasks: Set[str] = set()
+        self._message_router = get_message_router()
         
         # Background tasks
         self._background_tasks: Set[asyncio.Task] = set()
@@ -178,6 +193,9 @@ class BaseAgent(CapabilityDiscoveryMixin, ABC):
             # Setup capability discovery
             await self._setup_discovery()
             
+            # Register with message router
+            register_message_handler(self.agent_id, self._handle_incoming_message)
+            
             # Start background tasks
             heartbeat_task = asyncio.create_task(self._heartbeat_loop())
             cleanup_task = asyncio.create_task(self._cleanup_loop())
@@ -229,38 +247,48 @@ class BaseAgent(CapabilityDiscoveryMixin, ABC):
             self.logger.error("Error stopping agent", error=str(e))
             raise
 
-    async def send_message(self, message: A2AMessage) -> Optional[A2AResponse]:
+    async def send_message(self, envelope: A2AMessageEnvelope) -> Optional[A2AMessageEnvelope]:
         """
-        Send a message to another agent.
+        Send a JSON-RPC message envelope to another agent.
         
         Args:
-            message: Message to send
+            envelope: Message envelope to send
             
         Returns:
-            Response message if expecting a response
+            Response envelope if expecting a response
         """
         try:
             self.logger.debug(
                 "Sending message",
-                recipient=message.recipient_id,
-                message_type=message.message_type,
-                correlation_id=message.correlation_id
+                envelope_id=envelope.envelope_id,
+                recipient=envelope.recipient_id,
+                method=getattr(envelope.jsonrpc_message, 'method', 'response'),
+                correlation_id=envelope.correlation_id
             )
             
-            # Note: Don't update metrics here as this is for outgoing messages
-            # Metrics are updated in execute_capability for incoming capability requests
+            # Validate outgoing message
+            validation_result = validate_message(envelope)
+            if not validation_result.is_valid:
+                raise ValueError(f"Invalid outgoing message: {validation_result}")
             
-            # Send via FastA2A
-            if self._fasta2a:
-                # Implementation depends on FastA2A API
-                # This is a placeholder for the actual sending logic
-                pass
-                
-            return None
+            # Send via message router
+            response = await self._message_router.send_message(
+                envelope, 
+                self._transport_send_func
+            )
+            
+            return response
             
         except Exception as e:
             self.logger.error("Failed to send message", error=str(e))
             raise
+
+    async def _transport_send_func(self, message_bytes: bytes):
+        """Transport function for sending serialized messages"""
+        # This is a placeholder - in a real implementation this would
+        # send via HTTP, WebSocket, or other transport mechanism
+        # For now we'll just log that we would send
+        self.logger.debug("Would send message", size_bytes=len(message_bytes))
 
     async def execute_capability(
         self,
@@ -495,29 +523,374 @@ class BaseAgent(CapabilityDiscoveryMixin, ABC):
                 (1 - alpha) * self._metrics.average_response_time_ms
             )
 
-    # Message handlers (to be implemented based on actual protocol)
+    # JSON-RPC Message handlers
+
+    async def _handle_incoming_message(self, envelope: A2AMessageEnvelope) -> None:
+        """
+        Handle incoming JSON-RPC message envelope.
+        
+        Args:
+            envelope: Incoming message envelope
+        """
+        try:
+            # Validate incoming message
+            validation_result = validate_message(envelope)
+            if not validation_result.is_valid:
+                self.logger.warning(
+                    "Received invalid message",
+                    envelope_id=envelope.envelope_id,
+                    errors=validation_result.errors
+                )
+                # Send error response if possible
+                if isinstance(envelope.jsonrpc_message, JSONRPCRequest):
+                    await self._send_validation_error_response(envelope, validation_result)
+                return
+            
+            self.logger.debug(
+                "Handling incoming message",
+                envelope_id=envelope.envelope_id,
+                sender=envelope.sender_id,
+                message_type=type(envelope.jsonrpc_message).__name__
+            )
+            
+            # Route to appropriate handler
+            jsonrpc_msg = envelope.jsonrpc_message
+            
+            if isinstance(jsonrpc_msg, JSONRPCRequest):
+                await self._handle_jsonrpc_request(envelope, jsonrpc_msg)
+            elif isinstance(jsonrpc_msg, JSONRPCResponse):
+                await self._handle_jsonrpc_response(envelope, jsonrpc_msg)
+            elif isinstance(jsonrpc_msg, JSONRPCErrorResponse):
+                await self._handle_jsonrpc_error_response(envelope, jsonrpc_msg)
+            elif isinstance(jsonrpc_msg, JSONRPCNotification):
+                await self._handle_jsonrpc_notification(envelope, jsonrpc_msg)
+            else:
+                self.logger.warning(
+                    "Unknown message type",
+                    envelope_id=envelope.envelope_id,
+                    message_type=type(jsonrpc_msg).__name__
+                )
+                
+        except Exception as e:
+            self.logger.error(
+                "Error handling incoming message",
+                envelope_id=envelope.envelope_id,
+                error=str(e)
+            )
+
+    async def _handle_jsonrpc_request(self, envelope: A2AMessageEnvelope, request: JSONRPCRequest) -> None:
+        """Handle JSON-RPC request messages"""
+        try:
+            method = request.method
+            params = request.params or {}
+            
+            if method == A2AMethod.EXECUTE_CAPABILITY:
+                await self._handle_capability_execution_request(envelope, request)
+            elif method == A2AMethod.LIST_CAPABILITIES:
+                await self._handle_list_capabilities_request(envelope, request)
+            elif method == A2AMethod.GET_CAPABILITY_INFO:
+                await self._handle_capability_info_request(envelope, request)
+            elif method == A2AMethod.GET_AGENT_INFO:
+                await self._handle_agent_info_request(envelope, request)
+            elif method == A2AMethod.GET_AGENT_STATUS:
+                await self._handle_agent_status_request(envelope, request)
+            elif method == A2AMethod.HEARTBEAT:
+                await self._handle_heartbeat_request(envelope, request)
+            else:
+                # Unknown method
+                error_response = create_error_response(
+                    sender_id=self.agent_id,
+                    recipient_id=envelope.sender_id,
+                    request_id=request.id,
+                    error_code=JSONRPCErrorCode.METHOD_NOT_FOUND,
+                    error_message=f"Method not found: {method}",
+                    correlation_id=envelope.correlation_id
+                )
+                await self.send_message(error_response)
+                
+        except Exception as e:
+            self.logger.error("Error handling JSON-RPC request", error=str(e))
+            # Send internal error response
+            error_response = create_error_response(
+                sender_id=self.agent_id,
+                recipient_id=envelope.sender_id,
+                request_id=request.id,
+                error_code=JSONRPCErrorCode.INTERNAL_ERROR,
+                error_message=f"Internal error: {str(e)}",
+                correlation_id=envelope.correlation_id
+            )
+            await self.send_message(error_response)
+
+    async def _handle_capability_execution_request(self, envelope: A2AMessageEnvelope, request: JSONRPCRequest) -> None:
+        """Handle capability execution request"""
+        try:
+            params = request.params or {}
+            capability_name = params.get('capability_name')
+            parameters = params.get('parameters', {})
+            
+            if not capability_name:
+                error_response = create_error_response(
+                    sender_id=self.agent_id,
+                    recipient_id=envelope.sender_id,
+                    request_id=request.id,
+                    error_code=JSONRPCErrorCode.INVALID_PARAMS,
+                    error_message="capability_name is required",
+                    correlation_id=envelope.correlation_id
+                )
+                await self.send_message(error_response)
+                return
+            
+            # Execute capability
+            result = await self.execute_capability(
+                capability_name=capability_name,
+                parameters=parameters,
+                correlation_id=envelope.correlation_id
+            )
+            
+            # Send success response
+            success_response = create_success_response(
+                sender_id=self.agent_id,
+                recipient_id=envelope.sender_id,
+                request_id=request.id,
+                result=result,
+                correlation_id=envelope.correlation_id
+            )
+            await self.send_message(success_response)
+            
+        except ValueError as e:
+            # Capability not found or invalid parameters
+            error_response = create_error_response(
+                sender_id=self.agent_id,
+                recipient_id=envelope.sender_id,
+                request_id=request.id,
+                error_code=JSONRPCErrorCode.CAPABILITY_NOT_FOUND,
+                error_message=str(e),
+                correlation_id=envelope.correlation_id
+            )
+            await self.send_message(error_response)
+        except Exception as e:
+            # Internal execution error
+            error_response = create_error_response(
+                sender_id=self.agent_id,
+                recipient_id=envelope.sender_id,
+                request_id=request.id,
+                error_code=JSONRPCErrorCode.INTERNAL_ERROR,
+                error_message=f"Execution failed: {str(e)}",
+                correlation_id=envelope.correlation_id
+            )
+            await self.send_message(error_response)
+
+    async def _handle_list_capabilities_request(self, envelope: A2AMessageEnvelope, request: JSONRPCRequest) -> None:
+        """Handle list capabilities request"""
+        capabilities_data = [cap.model_dump() for cap in self.list_capabilities()]
+        
+        success_response = create_success_response(
+            sender_id=self.agent_id,
+            recipient_id=envelope.sender_id,
+            request_id=request.id,
+            result={"capabilities": capabilities_data},
+            correlation_id=envelope.correlation_id
+        )
+        await self.send_message(success_response)
+
+    async def _handle_capability_info_request(self, envelope: A2AMessageEnvelope, request: JSONRPCRequest) -> None:
+        """Handle capability info request"""
+        params = request.params or {}
+        capability_name = params.get('capability_name')
+        
+        if not capability_name:
+            error_response = create_error_response(
+                sender_id=self.agent_id,
+                recipient_id=envelope.sender_id,
+                request_id=request.id,
+                error_code=JSONRPCErrorCode.INVALID_PARAMS,
+                error_message="capability_name is required",
+                correlation_id=envelope.correlation_id
+            )
+            await self.send_message(error_response)
+            return
+        
+        capability = self.get_capability(capability_name)
+        if not capability:
+            error_response = create_error_response(
+                sender_id=self.agent_id,
+                recipient_id=envelope.sender_id,
+                request_id=request.id,
+                error_code=JSONRPCErrorCode.CAPABILITY_NOT_FOUND,
+                error_message=f"Capability not found: {capability_name}",
+                correlation_id=envelope.correlation_id
+            )
+            await self.send_message(error_response)
+            return
+        
+        success_response = create_success_response(
+            sender_id=self.agent_id,
+            recipient_id=envelope.sender_id,
+            request_id=request.id,
+            result=capability.model_dump(),
+            correlation_id=envelope.correlation_id
+        )
+        await self.send_message(success_response)
+
+    async def _handle_agent_info_request(self, envelope: A2AMessageEnvelope, request: JSONRPCRequest) -> None:
+        """Handle agent info request"""
+        success_response = create_success_response(
+            sender_id=self.agent_id,
+            recipient_id=envelope.sender_id,
+            request_id=request.id,
+            result=self.agent_card.model_dump(),
+            correlation_id=envelope.correlation_id
+        )
+        await self.send_message(success_response)
+
+    async def _handle_agent_status_request(self, envelope: A2AMessageEnvelope, request: JSONRPCRequest) -> None:
+        """Handle agent status request"""
+        status_data = {
+            "status": self._status.value,
+            "metrics": self.metrics.model_dump(),
+            "active_tasks": len(self._active_tasks),
+            "uptime_seconds": time.time() - self._start_time
+        }
+        
+        success_response = create_success_response(
+            sender_id=self.agent_id,
+            recipient_id=envelope.sender_id,
+            request_id=request.id,
+            result=status_data,
+            correlation_id=envelope.correlation_id
+        )
+        await self.send_message(success_response)
+
+    async def _handle_heartbeat_request(self, envelope: A2AMessageEnvelope, request: JSONRPCRequest) -> None:
+        """Handle heartbeat request"""
+        heartbeat_data = {
+            "timestamp": datetime.utcnow().isoformat(),
+            "status": self._status.value,
+            "agent_id": self.agent_id
+        }
+        
+        success_response = create_success_response(
+            sender_id=self.agent_id,
+            recipient_id=envelope.sender_id,
+            request_id=request.id,
+            result=heartbeat_data,
+            correlation_id=envelope.correlation_id
+        )
+        await self.send_message(success_response)
+
+    async def _handle_jsonrpc_response(self, envelope: A2AMessageEnvelope, response: JSONRPCResponse) -> None:
+        """Handle JSON-RPC response messages"""
+        # Responses are typically handled by the message router for request correlation
+        # This is mainly for logging and metrics
+        self.logger.debug(
+            "Received response",
+            envelope_id=envelope.envelope_id,
+            request_id=response.id
+        )
+
+    async def _handle_jsonrpc_error_response(self, envelope: A2AMessageEnvelope, error_response: JSONRPCErrorResponse) -> None:
+        """Handle JSON-RPC error response messages"""
+        self.logger.warning(
+            "Received error response",
+            envelope_id=envelope.envelope_id,
+            request_id=error_response.id,
+            error_code=error_response.error.code,
+            error_message=error_response.error.message
+        )
+
+    async def _handle_jsonrpc_notification(self, envelope: A2AMessageEnvelope, notification: JSONRPCNotification) -> None:
+        """Handle JSON-RPC notification messages"""
+        try:
+            method = notification.method
+            params = notification.params or {}
+            
+            if method == A2AMethod.HEARTBEAT:
+                await self._handle_heartbeat_notification(envelope, notification)
+            elif method == A2AMethod.TASK_STATUS_CHANGED:
+                await self._handle_task_status_notification(envelope, notification)
+            elif method == A2AMethod.AGENT_STATUS_CHANGED:
+                await self._handle_agent_status_notification(envelope, notification)
+            elif method == A2AMethod.CAPABILITY_UPDATED:
+                await self._handle_capability_updated_notification(envelope, notification)
+            else:
+                self.logger.debug(
+                    "Received unknown notification",
+                    method=method,
+                    params=params
+                )
+                
+        except Exception as e:
+            self.logger.error("Error handling notification", error=str(e))
+
+    async def _handle_heartbeat_notification(self, envelope: A2AMessageEnvelope, notification: JSONRPCNotification) -> None:
+        """Handle heartbeat notification"""
+        self.logger.debug(
+            "Received heartbeat",
+            sender=envelope.sender_id,
+            params=notification.params
+        )
+
+    async def _handle_task_status_notification(self, envelope: A2AMessageEnvelope, notification: JSONRPCNotification) -> None:
+        """Handle task status change notification"""
+        self.logger.info(
+            "Task status changed",
+            sender=envelope.sender_id,
+            params=notification.params
+        )
+
+    async def _handle_agent_status_notification(self, envelope: A2AMessageEnvelope, notification: JSONRPCNotification) -> None:
+        """Handle agent status change notification"""
+        self.logger.info(
+            "Agent status changed",
+            sender=envelope.sender_id,
+            params=notification.params
+        )
+
+    async def _handle_capability_updated_notification(self, envelope: A2AMessageEnvelope, notification: JSONRPCNotification) -> None:
+        """Handle capability updated notification"""
+        self.logger.info(
+            "Capability updated",
+            sender=envelope.sender_id,
+            params=notification.params
+        )
+
+    async def _send_validation_error_response(self, envelope: A2AMessageEnvelope, validation_result: ValidationResult) -> None:
+        """Send validation error response"""
+        if isinstance(envelope.jsonrpc_message, JSONRPCRequest):
+            error_response = create_error_response(
+                sender_id=self.agent_id,
+                recipient_id=envelope.sender_id,
+                request_id=envelope.jsonrpc_message.id,
+                error_code=JSONRPCErrorCode.VALIDATION_ERROR,
+                error_message="Message validation failed",
+                error_data={"errors": validation_result.errors},
+                correlation_id=envelope.correlation_id
+            )
+            await self.send_message(error_response)
+
+    # Legacy message handlers (for backward compatibility)
 
     async def _handle_request(self, message: A2ARequest) -> None:
-        """Handle incoming request messages"""
-        # Implementation for handling capability requests
+        """Handle incoming request messages (legacy)"""
+        # Convert to JSON-RPC and delegate
         pass
 
     async def _handle_response(self, message: A2AResponse) -> None:
-        """Handle response messages"""
-        # Implementation for handling responses to our requests
+        """Handle response messages (legacy)"""
+        # Convert to JSON-RPC and delegate
         pass
 
     async def _handle_error(self, message: A2AError) -> None:
-        """Handle error messages"""
-        # Implementation for handling error messages
+        """Handle error messages (legacy)"""
+        # Convert to JSON-RPC and delegate
         pass
 
     async def _handle_notification(self, message: A2AMessage) -> None:
-        """Handle notification messages"""
-        # Implementation for handling notifications
+        """Handle notification messages (legacy)"""
+        # Convert to JSON-RPC and delegate
         pass
 
     async def _handle_heartbeat(self, message: A2AMessage) -> None:
-        """Handle heartbeat messages"""
-        # Implementation for handling heartbeat messages
+        """Handle heartbeat messages (legacy)"""
+        # Convert to JSON-RPC and delegate
         pass

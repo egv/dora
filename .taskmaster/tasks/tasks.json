@@ -52,7 +52,7 @@
               1
             ],
             "details": "Implement message schemas for task requests, responses, status updates, and error handling. Ensure all messages conform to JSON-RPC 2.0 standards and support both text and structured payloads.[2][4]",
-            "status": "pending",
+            "status": "done",
             "testStrategy": ""
           },
           {
@@ -435,7 +435,7 @@
     ],
     "metadata": {
       "created": "2025-06-27T13:28:22.229Z",
-      "updated": "2025-07-02T20:18:48.305Z",
+      "updated": "2025-07-02T21:59:20.993Z",
       "description": "Tasks for master context"
     }
   }
