@@ -1,0 +1,90 @@
+# Task ID: 4
+# Title: Implement Calendar Cache MCP Tool
+# Status: pending
+# Dependencies: 3
+# Priority: high
+# Description: Develop the Calendar Cache MCP tool using Redis for high-performance caching of calendar data.
+# Details:
+Implement the Calendar Cache MCP tool with the following features:
+
+1. Set up Redis client with connection pooling:
+```python
+from redis import Redis
+from redis.connection import ConnectionPool
+
+pool = ConnectionPool(host='redis', port=6379, db=0)
+redis_client = Redis(connection_pool=pool)
+```
+
+2. Implement core caching functions:
+   - Store events with configurable TTL
+   - Retrieve cached events by location and date range
+   - Invalidate specific cache entries
+   - Provide cache performance statistics
+
+3. Design key structure:
+   - Use `location:date_range:categories` as hash key pattern
+   - Implement JSON serialization for event data
+   - Set default 24-hour TTL with override capability
+
+4. Implement Redis features:
+   - Use native TTL for automatic expiration
+   - Implement sorted sets for event ranking
+   - Set up Pub/Sub for cache invalidation notifications
+   - Use Streams for event update history
+
+5. Create cache management functions:
+   - Cache warming for popular locations
+   - Periodic cache cleanup
+   - Cache hit/miss metrics collection
+
+6. Implement cache interface:
+```python
+class CalendarCache:
+    def __init__(self, redis_client):
+        self.redis = redis_client
+    
+    def store_events(self, location, date_range, events, ttl=86400):
+        key = f"{location}:{date_range}:events"
+        serialized = json.dumps(events)
+        self.redis.set(key, serialized, ex=ttl)
+    
+    def get_events(self, location, date_range):
+        key = f"{location}:{date_range}:events"
+        data = self.redis.get(key)
+        if not data:
+            return None
+        return json.loads(data)
+    
+    def invalidate(self, location, date_range=None):
+        if date_range:
+            key = f"{location}:{date_range}:events"
+            self.redis.delete(key)
+        else:
+            pattern = f"{location}:*:events"
+            keys = self.redis.keys(pattern)
+            if keys:
+                self.redis.delete(*keys)
+    
+    def get_stats(self):
+        # Implementation for cache statistics
+        pass
+```
+
+7. Implement cache eviction policies:
+   - LRU (Least Recently Used) for memory management
+   - Priority-based eviction for important events
+
+8. Add monitoring and alerting for cache performance
+
+# Test Strategy:
+1. Unit tests for all cache operations
+2. Performance tests to verify sub-millisecond latency
+3. Load tests with high concurrency
+4. Test TTL functionality for automatic expiration
+5. Verify sorted sets for event ranking
+6. Test Pub/Sub for cache invalidation notifications
+7. Benchmark memory usage under various loads
+8. Test cache hit/miss ratio metrics
+9. Verify cache warming functionality
+10. Test cache eviction policies

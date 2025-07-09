@@ -1,0 +1,125 @@
+# Task ID: 12
+# Title: Implement Event Re-verification System
+# Status: pending
+# Dependencies: 3, 4
+# Priority: medium
+# Description: Develop the automated re-verification system that periodically checks event status, detects cancellations, and updates the calendar accordingly.
+# Details:
+Implement the event re-verification system with the following components:
+
+1. Create re-verification scheduler:
+```python
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
+from apscheduler.executors.pool import ThreadPoolExecutor, ProcessPoolExecutor
+
+jobstores = {
+    'default': SQLAlchemyJobStore(url='postgresql://user:password@localhost/scheduler')
+}
+
+executors = {
+    'default': ThreadPoolExecutor(20),
+    'processpool': ProcessPoolExecutor(5)
+}
+
+job_defaults = {
+    'coalesce': False,
+    'max_instances': 3
+}
+
+scheduler = AsyncIOScheduler(
+    jobstores=jobstores,
+    executors=executors,
+    job_defaults=job_defaults,
+)
+```
+
+2. Implement re-verification logic:
+   - Create priority-based verification queue
+   - Implement verification frequency rules
+   - Add source selection for re-verification
+   - Create status change detection
+   - Implement cancellation detection
+
+3. Create verification strategies:
+   - URL checking for event pages
+   - API calls to ticketing platforms
+   - Search-based verification
+   - Multi-source consensus
+
+4. Implement status update handling:
+   - Create status change workflow
+   - Add notification generation for changes
+   - Implement calendar update mechanism
+   - Create audit trail for changes
+
+5. Add monitoring and metrics:
+   - Track re-verification success rate
+   - Monitor cancellation detection time
+   - Measure verification accuracy
+   - Track resource utilization
+
+Example re-verification function:
+```python
+async def reverify_event(event_id):
+    event = await get_event(event_id)
+    
+    # Skip if event already completed or cancelled
+    if event.status in ['completed', 'cancelled']:
+        return
+    
+    # Determine verification strategy based on event type and available sources
+    strategy = determine_verification_strategy(event)
+    
+    # Execute verification
+    verification_result = await execute_verification(event, strategy)
+    
+    # Update event status if changed
+    if verification_result.status != event.status:
+        await update_event_status(
+            event_id=event_id,
+            new_status=verification_result.status,
+            confidence=verification_result.confidence,
+            sources=verification_result.sources,
+            notes=verification_result.notes
+        )
+        
+        # If cancelled, trigger notifications
+        if verification_result.status == 'cancelled':
+            await trigger_cancellation_notifications(event)
+            
+        # Update calendar
+        await update_calendar_for_event(event)
+    
+    # Schedule next verification based on event proximity and importance
+    next_verification = calculate_next_verification_time(event)
+    scheduler.add_job(
+        reverify_event,
+        'date',
+        run_date=next_verification,
+        args=[event_id],
+        id=f'reverify_{event_id}_{next_verification.isoformat()}',
+        replace_existing=True
+    )
+    
+    # Record verification in history
+    await record_verification_history(
+        event_id=event_id,
+        status=verification_result.status,
+        confidence=verification_result.confidence,
+        sources=verification_result.sources,
+        notes=verification_result.notes
+    )
+```
+
+# Test Strategy:
+1. Unit tests for verification strategies
+2. Integration tests for the complete system
+3. Test with simulated event changes
+4. Verify cancellation detection accuracy
+5. Test scheduler functionality
+6. Benchmark performance against requirements
+7. Test with various event types and sources
+8. Verify notification generation for changes
+9. Test audit trail completeness
+10. Validate metrics collection

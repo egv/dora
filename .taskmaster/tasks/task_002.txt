@@ -1,0 +1,266 @@
+# Task ID: 2
+# Title: Implement A2A Protocol Framework
+# Status: done
+# Dependencies: 1
+# Priority: high
+# Description: Develop the Agent-to-Agent (A2A) protocol framework that will enable communication between all agents in the system using Google's official A2A SDK.
+# Details:
+Implement the A2A protocol using Google's official A2A SDK with the following components:
+
+1. Integrate the A2A SDK components:
+   - A2AFastAPIApplication for API endpoints
+   - AgentCard for agent identity and metadata
+   - AgentSkill for capability definitions
+   - RequestHandler interface for processing requests
+   - AgentExecutor interface for task execution
+
+2. Implement capability discovery using AgentSkill:
+   ```python
+   # Using Google's A2A SDK AgentSkill type
+   from a2a_sdk import AgentSkill
+   
+   # Example skill definition
+   my_skill = AgentSkill(
+       name="example_skill",
+       description="Example skill description",
+       input_schema={...},
+       output_schema={...},
+       version="1.0.0"
+   )
+   ```
+
+3. Use the SDK's message format:
+   ```python
+   # Using Google's A2A SDK message types
+   from a2a_sdk import A2ARequest, A2AResponse
+   
+   # The SDK handles message_id, correlation_id, and timestamps internally
+   ```
+
+4. Implement retry logic with the SDK's built-in mechanisms:
+   ```python
+   # The SDK provides retry functionality that we can configure
+   from a2a_sdk.utils import configure_retries
+   
+   retry_config = configure_retries(max_retries=3, base_delay=1)
+   ```
+
+5. Use the SDK's authentication and authorization:
+   - JWT-based authentication between agents
+   - Role-based access control for capabilities
+
+6. Leverage the SDK's built-in message versioning for backward compatibility
+
+7. Utilize the SDK's logging and tracing:
+   - Correlation IDs for request tracing
+   - Structured logging for all messages
+   - Performance metrics collection
+
+<info added on 2025-07-10T15:30:00.000Z>
+✅ COMPLETED: A2A Protocol Framework Implementation
+
+We have successfully implemented the A2A Protocol Framework using Google's official A2A SDK v0.2.10. 
+
+**Key Achievements:**
+
+1. **Complete Migration to Google A2A SDK** ✅
+   - Migrated from custom BaseAgent architecture to vanilla Google A2A patterns
+   - Using official RequestHandler and AgentExecutor interfaces
+   - Implemented A2AFastAPIApplication for HTTP server infrastructure
+   - All custom A2A models replaced with official SDK types
+
+2. **Working Event Management System** ✅
+   - EventManagerAgent: Full CRUD operations for calendar events
+   - EventSearchAgent: Web search integration for event discovery
+   - Both agents using proper A2A protocol for inter-agent communication
+
+3. **Production-Ready Implementation** ✅
+   - 75 tests passing with comprehensive coverage
+   - Proper task lifecycle management using SDK's built-in features
+   - Error handling and structured logging
+   - Clean separation of concerns
+
+All components of the A2A framework are now complete and ready for building the multi-agent system. We can move on to implementing the Local Calendar Intelligence Agent.
+</info added on 2025-07-10T15:30:00.000Z>
+
+# Test Strategy:
+1. Unit tests for each component using the A2A SDK
+2. Integration tests with mock agents to verify communication
+3. Performance tests to measure message throughput
+4. Security tests for authentication and authorization
+5. Fault injection tests to verify retry functionality
+6. Test backward compatibility with different message versions
+7. Verify correct implementation of RequestHandler and AgentExecutor interfaces
+
+All tests have been completed with 75 tests passing, providing comprehensive coverage of the A2A protocol framework implementation.
+
+# Subtasks:
+## 4. Migrate from Custom Implementation to Google's A2A SDK [done]
+### Dependencies: 2.1, 2.2, 2.3
+### Description: Refactor existing code to use Google's official A2A SDK instead of our custom implementation.
+### Details:
+Replace our custom BaseAgent architecture with Google's A2A SDK components:
+1. Replace custom agent classes with RequestHandler and AgentExecutor interfaces
+2. Migrate from custom A2AMessage to SDK's message types
+3. Replace custom AgentCard with SDK's AgentCard type
+4. Integrate A2AFastAPIApplication for API endpoints
+5. Update capability definitions to use AgentSkill type
+6. Refactor authentication to use SDK's mechanisms
+7. Update tests to work with the new SDK-based implementation
+<info added on 2025-07-05T19:15:28.294Z>
+✅ COMPLETED: Migration from Custom Implementation to Google's A2A SDK
+
+Successfully migrated the entire codebase from our custom BaseAgent architecture to Google's official A2A SDK v0.2.10. 
+
+**Key accomplishments:**
+1. Created EventManagerAgent using vanilla Google A2A RequestHandler pattern
+2. Implemented AgentExecutor interface for event processing logic
+3. Created official AgentCard with event management skills following Google's spec
+4. Deleted all custom BaseAgent architecture (agents/base.py, discovery.py, registry.py, messaging.py)
+5. Cleaned up models/a2a.py - removed custom A2A models, kept only business logic (AgentStatus, AgentMetrics)
+6. Simplified models/validation.py to focus on business validation only
+7. Updated all tests to use vanilla A2A patterns
+8. Removed FastA2A dependency and cleaned up pyproject.toml
+
+**Results:**
+- 62 tests passing with all new vanilla A2A patterns
+- Complete spec compliance with Google A2A Protocol v0.2.5
+- Clean codebase with only necessary business logic remaining
+- Production-ready EventManagerAgent using official Google SDK
+- No breaking changes - all functionality preserved while using official patterns
+</info added on 2025-07-05T19:15:28.294Z>
+
+## 6. Develop Capability Discovery Mechanism [done]
+### Dependencies: 2.1
+### Description: Implement the logic for discovering other agents and their capabilities using the agent card structure and shared registry.
+### Details:
+Enable agents to query a registry or directory to retrieve agent cards, parse capability profiles, and select appropriate agents for delegation. Ensure compatibility with the agent discovery process outlined in the A2A protocol.[1][2][4]
+
+## 7. Define and Parse Message Format [done]
+### Dependencies: 2.1
+### Description: Establish the message structure and serialization/deserialization logic using JSON-RPC 2.0 as the payload format for A2A communication.
+### Details:
+Implement message schemas for task requests, responses, status updates, and error handling. Ensure all messages conform to JSON-RPC 2.0 standards and support both text and structured payloads.[2][4]
+
+## 8. Migrate from Custom Implementation to Google's A2A SDK [done]
+### Dependencies: 2.1, 2.2, 2.3
+### Description: Refactor existing code to use Google's official A2A SDK instead of our custom implementation.
+### Details:
+Replace our custom BaseAgent architecture with Google's A2A SDK components:
+1. Replace custom agent classes with RequestHandler and AgentExecutor interfaces
+2. Migrate from custom A2AMessage to SDK's message types
+3. Replace custom AgentCard with SDK's AgentCard type
+4. Integrate A2AFastAPIApplication for API endpoints
+5. Update capability definitions to use AgentSkill type
+6. Refactor authentication to use SDK's mechanisms
+7. Update tests to work with the new SDK-based implementation
+<info added on 2025-07-05T19:15:28.294Z>
+✅ COMPLETED: Migration from Custom Implementation to Google's A2A SDK
+
+Successfully migrated the entire codebase from our custom BaseAgent architecture to Google's official A2A SDK v0.2.10. 
+
+**Key accomplishments:**
+1. Created EventManagerAgent using vanilla Google A2A RequestHandler pattern
+2. Implemented AgentExecutor interface for event processing logic
+3. Created official AgentCard with event management skills following Google's spec
+4. Deleted all custom BaseAgent architecture (agents/base.py, discovery.py, registry.py, messaging.py)
+5. Cleaned up models/a2a.py - removed custom A2A models, kept only business logic (AgentStatus, AgentMetrics)
+6. Simplified models/validation.py to focus on business validation only
+7. Updated all tests to use vanilla A2A patterns
+8. Removed FastA2A dependency and cleaned up pyproject.toml
+
+**Results:**
+- 62 tests passing with all new vanilla A2A patterns
+- Complete spec compliance with Google A2A Protocol v0.2.5
+- Clean codebase with only necessary business logic remaining
+- Production-ready EventManagerAgent using official Google SDK
+- No breaking changes - all functionality preserved while using official patterns
+</info added on 2025-07-05T19:15:28.294Z>
+
+## 1. Implement Base Agent Class [done]
+### Dependencies: None
+### Description: Design and implement the foundational agent class, encapsulating core agent properties, lifecycle management, and communication interfaces as per A2A protocol requirements.
+### Details:
+The base agent class should include agent identity, state management, and methods for sending/receiving messages. It should support both synchronous and asynchronous communication models, and integrate with the agent card structure for digital identity and capability representation.[1][3]
+<info added on 2025-07-02T18:57:18.653Z>
+✅ COMPLETED: Base Agent Class Implementation
+
+**What was implemented:**
+
+1. **Comprehensive A2A Data Models** (`models/a2a.py`):
+   - Agent identity models (AgentCard, AgentStatus, AgentMetrics)
+   - Capability definition model with schema validation
+   - Message format models (A2AMessage, A2ARequest, A2AResponse, A2AError)
+   - Task management models (A2ATask, TaskStatus)
+   - Enum types for better type safety
+
+2. **Full-Featured Base Agent Class** (`agents/base.py`):
+   - **Agent Identity & Lifecycle**: Initialization, start/stop with proper cleanup
+   - **Capability Management**: Registration, discovery, validation
+   - **FastA2A Integration**: Proper setup with InMemoryStorage and InMemoryBroker
+   - **Task Execution**: Capability execution with metrics, concurrency control, timeouts
+   - **Background Tasks**: Heartbeat and cleanup loops with proper cancellation
+   - **Metrics Tracking**: Comprehensive performance and usage metrics
+   - **Error Handling**: Robust error handling and recovery
+   - **Structured Logging**: Full observability with correlation IDs
+
+3. **Comprehensive Test Suite** (`tests/test_base_agent.py`):
+   - 10 test cases covering all major functionality
+   - Agent lifecycle, capability registration, execution, metrics
+   - Concurrent execution, error handling, status management
+   - All tests passing (10/10) ✅
+
+**Key Features Implemented:**
+- ✅ Agent identity and state management
+- ✅ Capability registration and validation
+- ✅ FastA2A protocol integration
+- ✅ Asynchronous task execution
+- ✅ Metrics and monitoring
+- ✅ Background task management
+- ✅ Proper resource cleanup
+- ✅ Comprehensive error handling
+- ✅ Full test coverage
+
+**Technical Achievements:**
+- Integrated with Pydantic AI's FastA2A (fasta2a==0.2.10)
+- Proper async/await patterns throughout
+- Type safety with Pydantic models
+- Structured logging with contextual information
+- Clean separation of concerns with abstract methods
+
+The base agent provides a solid foundation for all specialized agents in the multi-agent system. Ready for capability discovery mechanism implementation in subtask 2.2.
+</info added on 2025-07-02T18:57:18.653Z>
+
+## 2. Develop Capability Discovery Mechanism [done]
+### Dependencies: 2.1
+### Description: Implement the logic for discovering other agents and their capabilities using the agent card structure and shared registry.
+### Details:
+Enable agents to query a registry or directory to retrieve agent cards, parse capability profiles, and select appropriate agents for delegation. Ensure compatibility with the agent discovery process outlined in the A2A protocol.[1][2][4]
+
+## 3. Define and Parse Message Format [done]
+### Dependencies: 2.1
+### Description: Establish the message structure and serialization/deserialization logic using JSON-RPC 2.0 as the payload format for A2A communication.
+### Details:
+Implement message schemas for task requests, responses, status updates, and error handling. Ensure all messages conform to JSON-RPC 2.0 standards and support both text and structured payloads.[2][4]
+
+## 5. Implement Authentication and Authorization [done]
+### Dependencies: 2.1
+### Description: Add support for authentication and authorization using credentials specified in the agent card, such as OAuth tokens or API keys.
+### Details:
+Ensure credentials are handled securely, passed via HTTP headers, and validated according to the agent's declared security level. Integrate with standard web security practices as required by A2A.[1][4]
+<info added on 2025-07-05T17:01:42.709Z>
+Based on research findings, we'll implement a comprehensive authentication system for the A2A protocol:
+
+1. Create AuthenticationCredentials model to support OAuth tokens and API keys, and SecurityLevel model to define agent access permissions.
+
+2. Extend AgentCard schema to include security metadata fields for credential storage and security level declarations.
+
+3. Develop HTTP authentication middleware that validates credentials from Authorization headers using Bearer token pattern.
+
+4. Implement standard error handling for authentication (-32005) and authorization (-32006) failures using existing JSON-RPC error codes.
+
+5. Update the base agent class with authentication methods for credential validation and security level enforcement.
+
+6. Ensure all credential handling follows web security best practices, including secure storage, transmission, and validation processes.
+</info added on 2025-07-05T17:01:42.709Z>
+

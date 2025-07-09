@@ -1,0 +1,322 @@
+# Task ID: 17
+# Title: Implement Redis Caching Layer for API Responses
+# Status: pending
+# Dependencies: 4, 10, 3
+# Priority: high
+# Description: Develop a Redis-based caching system for API responses to improve performance, focusing on EventSearchAgent responses, WeatherCollector API calls, and implementing cache invalidation strategies with hit/miss metrics.
+# Details:
+Implement the Redis caching layer with the following components:
+
+1. Create a Redis connection manager with connection pooling:
+```python
+import redis
+from redis.connection import ConnectionPool
+import os
+import json
+import hashlib
+import logging
+from typing import Any, Optional, Dict, Union
+from functools import wraps
+
+logger = logging.getLogger(__name__)
+
+class RedisCache:
+    _instance = None
+    _pool = None
+    
+    @classmethod
+    def get_instance(cls, host=None, port=None, db=None, password=None):
+        if cls._instance is None:
+            host = host or os.getenv("REDIS_HOST", "localhost")
+            port = port or int(os.getenv("REDIS_PORT", 6379))
+            db = db or int(os.getenv("REDIS_DB", 0))
+            password = password or os.getenv("REDIS_PASSWORD", None)
+            
+            cls._pool = ConnectionPool(host=host, port=port, db=db, password=password)
+            cls._instance = cls()
+        return cls._instance
+    
+    def get_connection(self):
+        return redis.Redis(connection_pool=self._pool)
+```
+
+2. Implement core caching functions:
+```python
+    def set(self, key: str, value: Any, expiry: int = 3600) -> bool:
+        """Store value in cache with expiration time in seconds"""
+        try:
+            conn = self.get_connection()
+            serialized = json.dumps(value)
+            return conn.setex(key, expiry, serialized)
+        except Exception as e:
+            logger.error(f"Redis cache set error: {str(e)}")
+            return False
+    
+    def get(self, key: str) -> Optional[Any]:
+        """Retrieve value from cache"""
+        try:
+            conn = self.get_connection()
+            result = conn.get(key)
+            if result:
+                self._increment_metric("hits")
+                return json.loads(result)
+            self._increment_metric("misses")
+            return None
+        except Exception as e:
+            logger.error(f"Redis cache get error: {str(e)}")
+            self._increment_metric("errors")
+            return None
+    
+    def delete(self, key: str) -> bool:
+        """Remove key from cache"""
+        try:
+            conn = self.get_connection()
+            return conn.delete(key) > 0
+        except Exception as e:
+            logger.error(f"Redis cache delete error: {str(e)}")
+            return False
+    
+    def _increment_metric(self, metric_name: str) -> None:
+        """Increment cache metric counter"""
+        try:
+            conn = self.get_connection()
+            conn.incr(f"cache:{metric_name}")
+        except Exception as e:
+            logger.error(f"Redis metric increment error: {str(e)}")
+```
+
+3. Create a decorator for easy caching of API responses:
+```python
+def cache_response(ttl: int = 3600, key_prefix: str = ""):
+    """Decorator to cache function responses in Redis"""
+    def decorator(func):
+        @wraps(func)
+        async def wrapper(*args, **kwargs):
+            # Generate a cache key based on function name, args and kwargs
+            key_parts = [key_prefix or func.__name__]
+            
+            # Add args and kwargs to key
+            if args:
+                key_parts.append(str(args))
+            if kwargs:
+                # Sort kwargs by key for consistent hashing
+                sorted_kwargs = sorted(kwargs.items())
+                key_parts.append(str(sorted_kwargs))
+            
+            # Create hash for the key
+            key = hashlib.md5(":".join(key_parts).encode()).hexdigest()
+            
+            # Try to get from cache
+            cache = RedisCache.get_instance()
+            cached_result = cache.get(key)
+            
+            if cached_result is not None:
+                return cached_result
+            
+            # Execute the function if not in cache
+            result = await func(*args, **kwargs)
+            
+            # Cache the result
+            cache.set(key, result, ttl)
+            
+            return result
+        return wrapper
+    return decorator
+```
+
+4. Implement EventSearchAgent caching:
+```python
+class EventSearchAgent:
+    # ... existing code ...
+    
+    @cache_response(ttl=1800, key_prefix="event_search")
+    async def search_events(self, location: str, date_range: Dict[str, str], 
+                           categories: Optional[List[str]] = None) -> List[Dict]:
+        # Existing implementation
+        pass
+```
+
+5. Implement WeatherCollector API caching:
+```python
+class WeatherCollector:
+    # ... existing code ...
+    
+    @cache_response(ttl=3600, key_prefix="weather")
+    async def get_forecast(self, location: str, days: int = 7) -> Dict:
+        # Existing implementation
+        pass
+    
+    @cache_response(ttl=86400, key_prefix="weather_historical")
+    async def get_historical_weather(self, location: str, date: str) -> Dict:
+        # Existing implementation
+        pass
+```
+
+6. Implement cache invalidation strategies:
+```python
+class CacheInvalidator:
+    @staticmethod
+    def invalidate_event_cache(location: str = None):
+        """Invalidate event cache for a specific location or all locations"""
+        cache = RedisCache.get_instance()
+        conn = cache.get_connection()
+        
+        if location:
+            # Create pattern to match keys for this location
+            pattern = f"event_search:*{location}*"
+            keys = conn.keys(pattern)
+            if keys:
+                conn.delete(*keys)
+        else:
+            # Delete all event search keys
+            pattern = "event_search:*"
+            keys = conn.keys(pattern)
+            if keys:
+                conn.delete(*keys)
+    
+    @staticmethod
+    def invalidate_weather_cache(location: str = None):
+        """Invalidate weather cache for a specific location or all locations"""
+        cache = RedisCache.get_instance()
+        conn = cache.get_connection()
+        
+        if location:
+            # Create pattern to match keys for this location
+            pattern = f"weather:*{location}*"
+            keys = conn.keys(pattern)
+            if keys:
+                conn.delete(*keys)
+        else:
+            # Delete all weather keys
+            pattern = "weather:*"
+            keys = conn.keys(pattern)
+            if keys:
+                conn.delete(*keys)
+```
+
+7. Implement cache metrics collection and reporting:
+```python
+class CacheMetrics:
+    @staticmethod
+    def get_metrics() -> Dict[str, int]:
+        """Get current cache metrics"""
+        metrics = {}
+        cache = RedisCache.get_instance()
+        conn = cache.get_connection()
+        
+        for metric in ["hits", "misses", "errors"]:
+            key = f"cache:{metric}"
+            value = conn.get(key)
+            metrics[metric] = int(value) if value else 0
+        
+        # Calculate hit rate
+        total = metrics["hits"] + metrics["misses"]
+        metrics["hit_rate"] = (metrics["hits"] / total) * 100 if total > 0 else 0
+        
+        return metrics
+    
+    @staticmethod
+    def reset_metrics() -> None:
+        """Reset all cache metrics to zero"""
+        cache = RedisCache.get_instance()
+        conn = cache.get_connection()
+        
+        for metric in ["hits", "misses", "errors"]:
+            conn.set(f"cache:{metric}", 0)
+```
+
+8. Add cache configuration to the API Gateway:
+```python
+# In the API Gateway initialization
+from fastapi import FastAPI, Depends, HTTPException, Security
+from fastapi.middleware.cors import CORSMiddleware
+
+app = FastAPI(
+    title="Multi-Agent Event Notification System API",
+    description="API Gateway for the Multi-Agent Event Notification System",
+    version="1.0.0"
+)
+
+# Initialize Redis cache on startup
+@app.on_event("startup")
+async def startup_event():
+    from app.cache import RedisCache
+    RedisCache.get_instance()
+
+# Add cache metrics endpoint
+@app.get("/api/metrics/cache", tags=["Metrics"])
+async def get_cache_metrics():
+    from app.cache import CacheMetrics
+    return CacheMetrics.get_metrics()
+```
+
+9. Implement cache warming for frequently accessed data:
+```python
+async def warm_location_caches(locations: List[str]):
+    """Pre-populate caches for common locations"""
+    weather_collector = WeatherCollector()
+    event_search = EventSearchAgent()
+    
+    for location in locations:
+        # Warm weather cache
+        await weather_collector.get_forecast(location)
+        
+        # Warm event cache for next 7 days
+        today = datetime.now().date()
+        week_later = today + timedelta(days=7)
+        date_range = {
+            "start": today.isoformat(),
+            "end": week_later.isoformat()
+        }
+        await event_search.search_events(location, date_range)
+```
+
+# Test Strategy:
+1. Unit test the Redis cache implementation:
+   - Test connection pooling with mock Redis
+   - Verify set/get/delete operations work correctly
+   - Test error handling for connection failures
+   - Verify cache key generation is consistent
+   - Test TTL functionality for automatic expiration
+
+2. Test the cache decorator:
+   - Verify function results are properly cached
+   - Test cache hit/miss behavior
+   - Verify TTL settings are respected
+   - Test with various argument types and combinations
+
+3. Test EventSearchAgent caching:
+   - Verify search results are cached correctly
+   - Test cache invalidation for event updates
+   - Measure performance improvement with cached vs. non-cached calls
+   - Verify cache keys are properly generated for different search parameters
+
+4. Test WeatherCollector API caching:
+   - Verify forecast data is cached correctly
+   - Test cache invalidation for weather updates
+   - Measure reduction in external API calls
+   - Verify historical weather data has longer TTL than forecasts
+
+5. Test cache invalidation strategies:
+   - Verify pattern-based key deletion works correctly
+   - Test location-specific invalidation
+   - Verify full cache clearing functionality
+   - Test invalidation timing with scheduled updates
+
+6. Test cache metrics:
+   - Verify hit/miss counters increment correctly
+   - Test hit rate calculation accuracy
+   - Verify metrics reset functionality
+   - Test metrics reporting through API endpoint
+
+7. Performance testing:
+   - Benchmark API response times with and without caching
+   - Test system under high load to verify cache effectiveness
+   - Measure memory usage of Redis under various cache sizes
+   - Verify sub-millisecond response times for cached data
+
+8. Integration testing:
+   - Test caching with the full API Gateway
+   - Verify cache warming functionality
+   - Test cache behavior with the complete system
+   - Verify metrics are correctly exposed through the API

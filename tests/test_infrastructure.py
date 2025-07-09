@@ -41,11 +41,13 @@ def test_dependencies():
     """Test that key dependencies can be imported"""
     try:
         import pydantic_ai
-        import fasta2a
         import fastapi
         import redis
         import psycopg2
         import structlog
+        # A2A SDK imports
+        from a2a.types import AgentCard
+        from a2a.server.apps.jsonrpc.fastapi_app import A2AFastAPIApplication
     except ImportError as e:
         pytest.fail(f"Failed to import required dependency: {e}")
 

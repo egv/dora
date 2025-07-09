@@ -1,0 +1,107 @@
+# Task ID: 7
+# Title: Develop Image Generation Agent
+# Status: pending
+# Dependencies: 2
+# Priority: medium
+# Description: Implement the Image Generation Agent with its three sub-agents: Prompt Builder, Generator, and Verifier.
+# Details:
+Implement the Image Generation Agent with the following components:
+
+1. Create base agent structure using the A2A protocol framework
+
+2. Implement Prompt Builder Sub-Agent:
+   - Create event-to-visual-description conversion
+   - Implement text overlay specification
+   - Add style adaptation based on event type
+   - Create technical requirement specification
+   - Implement prompt template management
+
+3. Implement Generator Sub-Agent:
+   - Create MCP tool interface for image generation
+   - Implement multiple generation attempt management
+   - Add parameter control (quality, style, variations)
+   - Create cost and quota tracking
+   - Implement image storage with metadata
+
+4. Implement Verifier Sub-Agent:
+   - Integrate OCR for text verification
+   - Add object detection for element confirmation
+   - Implement brand compliance checking
+   - Create composition and quality analysis
+   - Add accessibility checking
+   - Implement human review queue management
+
+5. Create verification process flow:
+   - Implement autonomous verification pipeline
+   - Add confidence score calculation
+   - Create decision point logic
+   - Implement human review integration
+   - Add feedback collection and processing
+
+6. Expose A2A capabilities:
+   - GenerateEventImage
+   - ReviewQueueStatus
+
+7. Implement MCP integration:
+   - Create pluggable MCP interface
+   - Add support for multiple providers
+   - Implement cost tracking
+   - Add rate limiting and quota management
+
+Example code for image generation and verification:
+```python
+async def generate_event_image(event, image_specs, text_overlay, style_prefs, verification_mode="autonomous", max_attempts=3):
+    # Build prompt
+    prompt = prompt_builder.build_prompt(event, image_specs, text_overlay, style_prefs)
+    
+    # Generate image
+    for attempt in range(max_attempts):
+        image_result = await image_generator.generate(prompt, image_specs)
+        
+        # Verify image
+        verification_result = await image_verifier.verify(image_result, text_overlay, style_prefs)
+        
+        if verification_result.confidence > 85 or verification_mode == "none":
+            return {
+                "image_url": image_result.url,
+                "cdn_url": await upload_to_cdn(image_result.url),
+                "verification": verification_result,
+                "metadata": {
+                    "prompt": prompt,
+                    "attempts": attempt + 1,
+                    "generation_time": image_result.generation_time,
+                    "cost": image_result.cost
+                }
+            }
+        elif verification_result.confidence > 70 and verification_mode == "human-assisted":
+            # Queue for human review
+            review_id = await queue_for_review(image_result, verification_result, prompt)
+            return {
+                "image_url": image_result.url,
+                "verification": verification_result,
+                "review_status": "pending",
+                "review_id": review_id,
+                "metadata": {
+                    "prompt": prompt,
+                    "attempts": attempt + 1
+                }
+            }
+        
+        # If we get here, regenerate with refined prompt
+        prompt = prompt_builder.refine_prompt(prompt, verification_result.issues)
+    
+    # If all attempts failed
+    raise MaxAttemptsExceeded(f"Failed to generate acceptable image after {max_attempts} attempts")
+```
+
+# Test Strategy:
+1. Unit tests for each sub-agent
+2. Integration tests for the complete agent
+3. Test prompt building with various event types
+4. Verify image generation with different parameters
+5. Test verification pipeline with known test cases
+6. Benchmark performance against requirements
+7. Test human review workflow
+8. Verify A2A capability interfaces
+9. Test with multiple MCP providers
+10. Validate error handling and recovery

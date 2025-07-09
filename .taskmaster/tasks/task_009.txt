@@ -1,0 +1,157 @@
+# Task ID: 9
+# Title: Implement PostgreSQL Database Schema
+# Status: pending
+# Dependencies: 1
+# Priority: high
+# Description: Design and implement the PostgreSQL database schema for storing all system data, including events, verification history, and analytics.
+# Details:
+Design and implement the PostgreSQL database schema with the following components:
+
+1. Create calendar entry table:
+```sql
+CREATE TABLE calendar_entries (
+    id SERIAL PRIMARY KEY,
+    location_id INTEGER NOT NULL REFERENCES locations(id),
+    date DATE NOT NULL,
+    day_of_week INTEGER NOT NULL,
+    week_of_month INTEGER NOT NULL,
+    season VARCHAR(20) NOT NULL,
+    weather_summary JSONB,
+    events_summary JSONB,
+    holidays_summary JSONB,
+    cultural_summary JSONB,
+    economic_summary JSONB,
+    social_summary JSONB,
+    marketing_opportunity_score INTEGER NOT NULL,
+    recommended_themes JSONB,
+    target_audience_suggestions JSONB,
+    optimal_outreach_times JSONB,
+    risk_factors JSONB,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    UNIQUE(location_id, date)
+);
+
+CREATE INDEX idx_calendar_entries_location_date ON calendar_entries(location_id, date);
+CREATE INDEX idx_calendar_entries_opportunity_score ON calendar_entries(marketing_opportunity_score);
+```
+
+2. Create events table:
+```sql
+CREATE TABLE events (
+    id SERIAL PRIMARY KEY,
+    title VARCHAR(255) NOT NULL,
+    description TEXT,
+    location_id INTEGER NOT NULL REFERENCES locations(id),
+    venue VARCHAR(255),
+    start_time TIMESTAMP WITH TIME ZONE NOT NULL,
+    end_time TIMESTAMP WITH TIME ZONE,
+    category VARCHAR(100) NOT NULL,
+    subcategory VARCHAR(100),
+    price_range JSONB,
+    url VARCHAR(512),
+    image_url VARCHAR(512),
+    status VARCHAR(20) NOT NULL DEFAULT 'active',
+    verification_status VARCHAR(20) NOT NULL DEFAULT 'pending',
+    verification_confidence FLOAT,
+    verification_sources JSONB,
+    last_verified_at TIMESTAMP WITH TIME ZONE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX idx_events_location_date ON events(location_id, (DATE(start_time)));
+CREATE INDEX idx_events_category ON events(category);
+CREATE INDEX idx_events_verification_status ON events(verification_status);
+```
+
+3. Create verification history table:
+```sql
+CREATE TABLE verification_history (
+    id SERIAL PRIMARY KEY,
+    event_id INTEGER NOT NULL REFERENCES events(id),
+    verification_status VARCHAR(20) NOT NULL,
+    verification_confidence FLOAT,
+    verification_sources JSONB,
+    verification_notes TEXT,
+    verified_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX idx_verification_history_event ON verification_history(event_id);
+```
+
+4. Create social groups table:
+```sql
+CREATE TABLE social_groups (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    age_min INTEGER,
+    age_max INTEGER,
+    interests JSONB,
+    cultural_background JSONB,
+    income_level VARCHAR(20),
+    preferred_languages JSONB,
+    communication_preferences JSONB,
+    behavioral_patterns JSONB,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+```
+
+5. Create generated content table:
+```sql
+CREATE TABLE generated_content (
+    id SERIAL PRIMARY KEY,
+    event_id INTEGER REFERENCES events(id),
+    social_group_id INTEGER REFERENCES social_groups(id),
+    content_type VARCHAR(50) NOT NULL,
+    content TEXT,
+    image_url VARCHAR(512),
+    language VARCHAR(10) NOT NULL,
+    quality_score FLOAT,
+    generation_metadata JSONB,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX idx_generated_content_event ON generated_content(event_id);
+CREATE INDEX idx_generated_content_social_group ON generated_content(social_group_id);
+```
+
+6. Create analytics table:
+```sql
+CREATE TABLE analytics (
+    id SERIAL PRIMARY KEY,
+    date DATE NOT NULL,
+    location_id INTEGER NOT NULL REFERENCES locations(id),
+    events_discovered INTEGER NOT NULL DEFAULT 0,
+    events_verified INTEGER NOT NULL DEFAULT 0,
+    verification_success_rate FLOAT,
+    messages_generated INTEGER NOT NULL DEFAULT 0,
+    images_generated INTEGER NOT NULL DEFAULT 0,
+    audience_analyses_performed INTEGER NOT NULL DEFAULT 0,
+    api_calls JSONB,
+    error_counts JSONB,
+    performance_metrics JSONB,
+    cost_metrics JSONB,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX idx_analytics_date_location ON analytics(date, location_id);
+```
+
+7. Implement data retention policies:
+   - Create partitioning for time-series data
+   - Implement automatic archiving for old data
+   - Set up data pruning for completed/cancelled events
+
+# Test Strategy:
+1. Verify schema creation with test database
+2. Test data insertion and retrieval for each table
+3. Verify index performance with large datasets
+4. Test foreign key constraints
+5. Benchmark query performance for common operations
+6. Test data retention policies
+7. Verify partitioning functionality
+8. Test concurrent access patterns
+9. Validate backup and restore procedures
+10. Test data migration scripts

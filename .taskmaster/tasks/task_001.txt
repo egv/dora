@@ -1,0 +1,43 @@
+# Task ID: 1
+# Title: Setup Project Infrastructure with uv
+# Status: done
+# Dependencies: None
+# Priority: high
+# Description: Initialize the project repository with proper structure and setup Python environment using uv as the package manager.
+# Details:
+Create a new repository with the following structure:
+- `/agents/` - Directory for all agent implementations
+- `/mcp_tools/` - Directory for MCP tool implementations
+- `/models/` - Directory for data models
+- `/api/` - Directory for API gateway
+- `/tests/` - Directory for tests
+
+Setup Python environment:
+1. Install uv: `curl -sSf https://install.python-poetry.org | python3 -`
+2. Create pyproject.toml with Python 3.11+ requirement
+3. Initialize virtual environment: `uv venv`
+4. Add core dependencies:
+   - FastAPI 0.100.0+
+   - Pydantic 2.0+
+   - Redis 4.5.0+
+   - psycopg2-binary 2.9.6+
+   - httpx 0.24.0+
+   - pytest 7.3.1+
+   - python-dotenv 1.0.0+
+5. Create .env.example file with required environment variables
+6. Setup .gitignore for Python projects
+7. Create README.md with project overview and setup instructions
+8. Setup pre-commit hooks for code quality
+
+Implement CI pipeline with GitHub Actions for:
+- Linting with flake8/black
+- Type checking with mypy
+- Running tests with pytest
+- Building Docker images
+
+# Test Strategy:
+1. Verify project structure is correctly set up
+2. Ensure uv commands work as expected: `uv sync`, `uv add`, `uv run python`
+3. Confirm virtual environment is created and activated
+4. Validate CI pipeline runs successfully on push
+5. Check that all dependencies can be installed with `uv sync`

@@ -1,0 +1,329 @@
+# Task ID: 16
+# Title: Implement PostgreSQL Database Integration
+# Status: pending
+# Dependencies: 9, 1
+# Priority: high
+# Description: Integrate PostgreSQL database with all agents, connecting EventCollector, WeatherCollector, and CalendarIntelligenceAgent to store their respective data with proper connection pooling and error handling.
+# Details:
+Implement PostgreSQL database integration with the following components:
+
+1. Create database connection utility:
+```python
+import asyncpg
+from contextlib import asynccontextmanager
+from typing import AsyncGenerator, Dict, Any, Optional
+import logging
+
+logger = logging.getLogger(__name__)
+
+class DatabasePool:
+    _pool: Optional[asyncpg.Pool] = None
+    
+    @classmethod
+    async def initialize(cls, connection_string: str, min_size: int = 5, max_size: int = 20):
+        """Initialize the database connection pool."""
+        try:
+            cls._pool = await asyncpg.create_pool(
+                connection_string,
+                min_size=min_size,
+                max_size=max_size,
+                command_timeout=60
+            )
+            logger.info(f"Database pool initialized with size {min_size}-{max_size}")
+        except Exception as e:
+            logger.error(f"Failed to initialize database pool: {str(e)}")
+            raise
+    
+    @classmethod
+    async def close(cls):
+        """Close the database connection pool."""
+        if cls._pool:
+            await cls._pool.close()
+            cls._pool = None
+            logger.info("Database pool closed")
+    
+    @classmethod
+    @asynccontextmanager
+    async def connection(cls) -> AsyncGenerator[asyncpg.Connection, None]:
+        """Get a connection from the pool."""
+        if not cls._pool:
+            raise RuntimeError("Database pool not initialized")
+        
+        try:
+            conn = await cls._pool.acquire()
+            yield conn
+        except Exception as e:
+            logger.error(f"Database connection error: {str(e)}")
+            raise
+        finally:
+            await cls._pool.release(conn)
+```
+
+2. Implement EventCollector database integration:
+```python
+class EventDatabase:
+    @staticmethod
+    async def store_event(event_data: Dict[str, Any]) -> int:
+        """Store event data in the database and return the event ID."""
+        try:
+            async with DatabasePool.connection() as conn:
+                query = """
+                INSERT INTO events (
+                    title, description, start_time, end_time, location_id, 
+                    source, source_id, categories, metadata
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                RETURNING id
+                """
+                event_id = await conn.fetchval(
+                    query,
+                    event_data['title'],
+                    event_data.get('description', ''),
+                    event_data['start_time'],
+                    event_data.get('end_time'),
+                    event_data['location_id'],
+                    event_data['source'],
+                    event_data['source_id'],
+                    event_data.get('categories', []),
+                    event_data.get('metadata', {})
+                )
+                return event_id
+        except Exception as e:
+            logger.error(f"Failed to store event: {str(e)}")
+            raise DatabaseError(f"Failed to store event: {str(e)}")
+```
+
+3. Implement WeatherCollector database integration:
+```python
+class WeatherDatabase:
+    @staticmethod
+    async def store_weather_data(weather_data: Dict[str, Any]) -> int:
+        """Store weather data in the database and return the record ID."""
+        try:
+            async with DatabasePool.connection() as conn:
+                query = """
+                INSERT INTO weather_data (
+                    location_id, timestamp, temperature, conditions, 
+                    precipitation, wind_speed, humidity, forecast_data
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                RETURNING id
+                """
+                record_id = await conn.fetchval(
+                    query,
+                    weather_data['location_id'],
+                    weather_data['timestamp'],
+                    weather_data['temperature'],
+                    weather_data['conditions'],
+                    weather_data.get('precipitation', 0),
+                    weather_data.get('wind_speed', 0),
+                    weather_data.get('humidity', 0),
+                    weather_data.get('forecast_data', {})
+                )
+                return record_id
+        except Exception as e:
+            logger.error(f"Failed to store weather data: {str(e)}")
+            raise DatabaseError(f"Failed to store weather data: {str(e)}")
+```
+
+4. Implement CalendarIntelligenceAgent database integration:
+```python
+class CalendarInsightsDatabase:
+    @staticmethod
+    async def store_insight(insight_data: Dict[str, Any]) -> int:
+        """Store calendar insight in the database and return the insight ID."""
+        try:
+            async with DatabasePool.connection() as conn:
+                query = """
+                INSERT INTO calendar_insights (
+                    date, location_id, insight_type, insight_data, 
+                    confidence_score, related_events, metadata
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+                RETURNING id
+                """
+                insight_id = await conn.fetchval(
+                    query,
+                    insight_data['date'],
+                    insight_data['location_id'],
+                    insight_data['insight_type'],
+                    insight_data['insight_data'],
+                    insight_data.get('confidence_score', 0.0),
+                    insight_data.get('related_events', []),
+                    insight_data.get('metadata', {})
+                )
+                return insight_id
+        except Exception as e:
+            logger.error(f"Failed to store calendar insight: {str(e)}")
+            raise DatabaseError(f"Failed to store calendar insight: {str(e)}")
+```
+
+5. Create custom exception classes:
+```python
+class DatabaseError(Exception):
+    """Base exception for database errors."""
+    pass
+
+class ConnectionError(DatabaseError):
+    """Exception raised for connection errors."""
+    pass
+
+class QueryError(DatabaseError):
+    """Exception raised for query execution errors."""
+    pass
+
+class TransactionError(DatabaseError):
+    """Exception raised for transaction errors."""
+    pass
+```
+
+6. Implement database initialization in application startup:
+```python
+async def initialize_database():
+    """Initialize database connections on application startup."""
+    connection_string = os.getenv("DATABASE_URL")
+    if not connection_string:
+        raise ConfigurationError("DATABASE_URL environment variable not set")
+    
+    await DatabasePool.initialize(
+        connection_string=connection_string,
+        min_size=int(os.getenv("DB_MIN_CONNECTIONS", "5")),
+        max_size=int(os.getenv("DB_MAX_CONNECTIONS", "20"))
+    )
+
+async def shutdown_database():
+    """Close database connections on application shutdown."""
+    await DatabasePool.close()
+```
+
+7. Add database integration to agent initialization:
+```python
+# In EventCollector agent
+class EventCollector:
+    def __init__(self, config):
+        self.db = EventDatabase()
+        # Other initialization...
+    
+    async def process_event(self, event_data):
+        # Process event...
+        await self.db.store_event(event_data)
+
+# In WeatherCollector agent
+class WeatherCollector:
+    def __init__(self, config):
+        self.db = WeatherDatabase()
+        # Other initialization...
+    
+    async def collect_weather(self, location_id):
+        # Collect weather data...
+        await self.db.store_weather_data(weather_data)
+
+# In CalendarIntelligenceAgent
+class CalendarIntelligenceAgent:
+    def __init__(self, config):
+        self.db = CalendarInsightsDatabase()
+        # Other initialization...
+    
+    async def generate_insight(self, date, location_id):
+        # Generate insight...
+        await self.db.store_insight(insight_data)
+```
+
+8. Implement transaction management:
+```python
+@asynccontextmanager
+async def transaction() -> AsyncGenerator[asyncpg.Connection, None]:
+    """Context manager for database transactions."""
+    if not DatabasePool._pool:
+        raise RuntimeError("Database pool not initialized")
+    
+    conn = await DatabasePool._pool.acquire()
+    try:
+        tr = conn.transaction()
+        await tr.start()
+        try:
+            yield conn
+            await tr.commit()
+        except Exception:
+            await tr.rollback()
+            raise
+    finally:
+        await DatabasePool._pool.release(conn)
+```
+
+9. Create database health check:
+```python
+async def check_database_health() -> Dict[str, Any]:
+    """Check database health and return status information."""
+    try:
+        async with DatabasePool.connection() as conn:
+            start_time = time.time()
+            await conn.execute("SELECT 1")
+            response_time = time.time() - start_time
+            
+            # Get connection pool stats
+            pool_stats = {
+                "min_size": DatabasePool._pool.get_min_size(),
+                "max_size": DatabasePool._pool.get_max_size(),
+                "size": DatabasePool._pool.get_size(),
+                "free_size": DatabasePool._pool.get_free_size()
+            }
+            
+            return {
+                "status": "healthy",
+                "response_time_ms": round(response_time * 1000, 2),
+                "pool_stats": pool_stats
+            }
+    except Exception as e:
+        logger.error(f"Database health check failed: {str(e)}")
+        return {
+            "status": "unhealthy",
+            "error": str(e)
+        }
+```
+
+# Test Strategy:
+1. Unit test database connection utility:
+   - Test pool initialization with valid and invalid connection strings
+   - Verify connection acquisition and release
+   - Test error handling for connection failures
+   - Verify pool size constraints are respected
+
+2. Test EventCollector database integration:
+   - Create mock event data and verify it's stored correctly
+   - Test error handling for invalid event data
+   - Verify transaction rollback on failure
+   - Test concurrent event storage
+
+3. Test WeatherCollector database integration:
+   - Create mock weather data and verify it's stored correctly
+   - Test error handling for invalid weather data
+   - Verify data retrieval functions
+   - Test historical weather data queries
+
+4. Test CalendarIntelligenceAgent database integration:
+   - Create mock insight data and verify it's stored correctly
+   - Test error handling for invalid insight data
+   - Verify insight retrieval by date and location
+   - Test insight update functionality
+
+5. Integration tests with actual agents:
+   - Test end-to-end flow from agent data collection to database storage
+   - Verify data integrity across the system
+   - Test system behavior under database unavailability
+   - Verify reconnection logic works as expected
+
+6. Performance testing:
+   - Benchmark database operations under load
+   - Test connection pool behavior under high concurrency
+   - Verify query performance with large datasets
+   - Test system performance with simulated production load
+
+7. Error handling tests:
+   - Simulate database connection failures
+   - Test system behavior during query timeouts
+   - Verify error logging and reporting
+   - Test recovery from temporary database outages
+
+8. Database health check tests:
+   - Verify health check accurately reports database status
+   - Test health check response times
+   - Verify pool statistics reporting
+   - Test health check behavior during database issues

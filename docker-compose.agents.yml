@@ -1,0 +1,105 @@
+version: '3.8'
+
+services:
+  # EventSearchAgent service
+  event-search-agent:
+    build:
+      context: .
+      dockerfile: Containerfile
+      target: event-search-agent
+    container_name: dora-event-search-agent
+    ports:
+      - "8001:8001"
+    environment:
+      - PYTHONPATH=/app
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - agent-network
+
+  # CalendarIntelligenceAgent service
+  calendar-intelligence-agent:
+    build:
+      context: .
+      dockerfile: Containerfile
+      target: calendar-intelligence-agent
+    container_name: dora-calendar-intelligence-agent
+    ports:
+      - "8002:8002"
+    environment:
+      - PYTHONPATH=/app
+      - WEATHER_API_KEY=${WEATHER_API_KEY:-}
+    depends_on:
+      - event-search-agent
+      - redis
+      - postgres
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - agent-network
+
+  # Redis cache service
+  redis:
+    image: redis:7-alpine
+    container_name: dora-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+    networks:
+      - agent-network
+
+  # PostgreSQL database service
+  postgres:
+    image: postgres:15-alpine
+    container_name: dora-postgres
+    environment:
+      - POSTGRES_DB=dora
+      - POSTGRES_USER=dora
+      - POSTGRES_PASSWORD=dora_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./scripts/init_db.sql:/docker-entrypoint-initdb.d/01-init.sql
+    restart: unless-stopped
+    networks:
+      - agent-network
+
+  # Development container
+  dev:
+    build:
+      context: .
+      dockerfile: Containerfile
+      target: development
+    container_name: dora-dev
+    volumes:
+      - .:/app
+      - /app/.venv
+    environment:
+      - PYTHONPATH=/app
+      - WEATHER_API_KEY=${WEATHER_API_KEY:-}
+    depends_on:
+      - redis
+      - postgres
+    networks:
+      - agent-network
+    tty: true
+    stdin_open: true
+
+networks:
+  agent-network:
+    driver: bridge
+
+volumes:
+  redis-data:
+  postgres-data:
