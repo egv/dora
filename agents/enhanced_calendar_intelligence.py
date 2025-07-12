@@ -86,6 +86,18 @@ class EnhancedCalendarIntelligenceExecutor(CalendarIntelligenceExecutor):
             "holidays": ["HolidayAgent", "CalendarAgent"]
         }
     
+    def _get_collector(self):
+        """Get the collector instance for fallback operations"""
+        return self.collector
+    
+    def _get_verifier(self):
+        """Get the verifier instance for data verification"""
+        return self.verifier
+    
+    def _get_builder(self):
+        """Get the builder instance for calendar construction"""
+        return self.builder
+    
     async def _get_services(self):
         """Initialize A2A services if not already done"""
         if self.discovery_service is None:
@@ -259,6 +271,7 @@ class EnhancedCalendarIntelligenceExecutor(CalendarIntelligenceExecutor):
         events = []
         weather = {}
         holidays = []
+        weather_result = None
         
         # Process events from workflow
         if "collect_events" in workflow_results:

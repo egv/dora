@@ -30,6 +30,14 @@ class DoraConfig(BaseSettings):
     perplexity_api_key: Optional[str] = Field(default=None, env="PERPLEXITY_API_KEY")  # Deprecated - using WebSearchTool
     telegram_api_key: str = Field(default="", env="TELEGRAM_API_KEY")
     
+    # Database configuration
+    database_url: str = Field(default="postgresql://dora:dora_password@localhost:5432/dora", env="DATABASE_URL")
+    redis_url: str = Field(default="redis://localhost:6379/0", env="REDIS_URL")
+    db_pool_size: int = Field(default=10, env="DB_POOL_SIZE")
+    db_max_overflow: int = Field(default=20, env="DB_MAX_OVERFLOW")
+    db_pool_timeout: int = Field(default=30, env="DB_POOL_TIMEOUT")
+    redis_pool_size: int = Field(default=10, env="REDIS_POOL_SIZE")
+    
     # Memory cache configuration
     memory_cache_enabled: bool = Field(default=True, env="MEMORY_CACHE_ENABLED")
     memory_cache_path: str = Field(default="./cache/dora_memory.db", env="MEMORY_CACHE_PATH")

@@ -104,11 +104,17 @@ class AgentDiscoveryService:
         self.logger.info("Stopping Agent Discovery Service")
         
         if self._health_check_task:
-            self._health_check_task.cancel()
             try:
-                await self._health_check_task
-            except asyncio.CancelledError:
-                pass
+                self._health_check_task.cancel()
+                try:
+                    await self._health_check_task
+                except asyncio.CancelledError:
+                    pass
+            except RuntimeError as e:
+                if "Event loop is closed" in str(e):
+                    self.logger.debug("Event loop closed during cleanup")
+                else:
+                    raise
     
     async def register_agent(
         self, 

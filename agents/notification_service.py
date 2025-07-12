@@ -143,11 +143,23 @@ class NotificationService:
         
         # Cancel delivery workers
         for worker in self.delivery_workers:
-            worker.cancel()
+            try:
+                worker.cancel()
+            except RuntimeError as e:
+                if "Event loop is closed" in str(e):
+                    self.logger.debug("Event loop closed during cleanup")
+                else:
+                    raise
         
         # Wait for workers to finish
         if self.delivery_workers:
-            await asyncio.gather(*self.delivery_workers, return_exceptions=True)
+            try:
+                await asyncio.gather(*self.delivery_workers, return_exceptions=True)
+            except RuntimeError as e:
+                if "got Future" in str(e) and "attached to a different loop" in str(e):
+                    self.logger.debug("Workers attached to different event loop during cleanup")
+                else:
+                    raise
         
         self.delivery_workers.clear()
         self.logger.info("Notification service stopped")
