@@ -1,0 +1,57 @@
+{
+  "server_name": "dora-calendar-cache",
+  "description": "High-performance Redis-based calendar data caching server for Dora",
+  "version": "1.0.0",
+  
+  "cache_settings": {
+    "default_ttl_seconds": 86400,
+    "max_connections": 10,
+    "connection_timeout_seconds": 30,
+    "retry_on_timeout": true,
+    "health_check_interval_seconds": 30
+  },
+  
+  "key_patterns": {
+    "calendar_data": "calendar:{location}:{date_range}[:{categories}]",
+    "ranking": "calendar:ranking:{location}",
+    "statistics": "calendar_cache:stats"
+  },
+  
+  "operations": {
+    "store_calendar_data": {
+      "description": "Store calendar data with configurable TTL",
+      "performance_target_ms": 5,
+      "batch_size": 100
+    },
+    "get_calendar_data": {
+      "description": "Retrieve cached calendar data",
+      "performance_target_ms": 2,
+      "enable_hit_tracking": true
+    },
+    "invalidate_cache": {
+      "description": "Invalidate cache entries by pattern",
+      "batch_delete_size": 1000,
+      "performance_target_ms": 10
+    }
+  },
+  
+  "monitoring": {
+    "enable_statistics": true,
+    "log_file": "/tmp/dora_calendar_cache_server.log",
+    "log_level": "INFO",
+    "metrics_collection": {
+      "hit_rate": true,
+      "processing_time": true,
+      "memory_usage": true,
+      "connection_stats": true
+    }
+  },
+  
+  "features": {
+    "cache_warming": true,
+    "sorted_sets_ranking": true,
+    "pattern_invalidation": true,
+    "statistics_collection": true,
+    "connection_pooling": true
+  }
+}
